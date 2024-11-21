@@ -5,43 +5,62 @@ from app.models.user import User
 from app.core.errors import APIError
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from datetime import timedelta
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from app.core.errors import APIError
+import os
+from .google import verify_google_token
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 auth_bp = Blueprint('auth', __name__)
-
+print("Auth blueprint created:", auth_bp.url_prefix)  # Debug print
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
+    logger.info("Login endpoint hit")
+    try:
+        data = request.get_json()
+        logger.info(f"Received data: {data}")
 
-    if not data or not data.get('email') or not data.get('password'):
-        raise APIError('Missing email or password', status_code=400)
+        if not data:
+            logger.error("No JSON data received")
+            raise APIError('No data provided', status_code=400)
 
-    user = User.query.filter_by(email=data['email']).first()
+        if not data.get('email') or not data.get('password'):
+            logger.error("Missing email or password")
+            raise APIError('Missing email or password', status_code=400)
 
-    if not user or not user.verify_password(data['password']):
-        raise APIError('Invalid email or password', status_code=401)
+        user = User.query.filter_by(email=data['email']).first()
+        logger.info(f"Found user: {user}")
 
-    if not user.is_active:
-        raise APIError('Account is deactivated', status_code=403)
+        if not user:
+            logger.error(f"No user found with email: {data['email']}")
+            raise APIError('Invalid email or password', status_code=401)
 
-    # Create access token
-    access_token = create_access_token(
-        identity=user.id,
-        additional_claims={
-            'email': user.email,
-            'role': user.role.name if user.role else None,
-            'tenant_id': user.tenant_id
-        },
-        expires_delta=timedelta(hours=1)
-    )
+        if not user.verify_password(data['password']):
+            logger.error("Invalid password")
+            raise APIError('Invalid email or password', status_code=401)
 
-    # Update last login
-    user.update_last_login()
+        token = create_access_token(
+            identity=user.id,
+            additional_claims={
+                'email': user.email,
+                'role': user.role.name if user.role else None,
+                'tenant_id': user.tenant_id
+            }
+        )
+        logger.info("Token created successfully")
 
-    return jsonify({
-        'token': access_token,
-        'user': user.to_dict()
-    })
+        return jsonify({
+            'token': token,
+            'user': user.to_dict()
+        })
+    except Exception as e:
+        logger.exception("Error in login endpoint")
+        raise
 
 
 @auth_bp.route('/google', methods=['POST'])
@@ -105,3 +124,4 @@ def get_current_user():
 def verify_google_token(token):
     # Implementation needed - will add Google OAuth verification
     pass
+
