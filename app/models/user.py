@@ -6,6 +6,31 @@ from uuid import uuid4
 from datetime import datetime
 
 
+class Tenant(BaseModel):
+    __tablename__ = 'tenants'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    name = db.Column(db.String(100), nullable=False)
+    subdomain = db.Column(db.String(100), unique=True, nullable=False)
+    settings = db.Column(db.JSON)
+    is_active = db.Column(db.Boolean, default=True)
+
+    def __repr__(self):
+        return f'<Tenant {self.name}>'
+
+
+class Role(BaseModel):
+    __tablename__ = 'roles'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.String(255))
+    permissions = db.Column(db.JSON)
+
+    def __repr__(self):
+        return f'<Role {self.name}>'
+
+
 class User(BaseModel, SecurityMixin):
     __tablename__ = 'users'
 
@@ -20,6 +45,7 @@ class User(BaseModel, SecurityMixin):
 
     # Multi-tenancy support
     tenant_id = db.Column(db.String(36), db.ForeignKey('tenants.id'))
+    tenant = db.relationship('Tenant', foreign_keys=[tenant_id], backref=db.backref('users', lazy='dynamic'))
 
     # Role relationship
     role_id = db.Column(db.String(36), db.ForeignKey('roles.id'))
@@ -42,28 +68,3 @@ class User(BaseModel, SecurityMixin):
     def update_last_login(self):
         self.last_login = datetime.utcnow()
         db.session.commit()
-
-
-class Role(BaseModel):
-    __tablename__ = 'roles'
-
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    description = db.Column(db.String(255))
-    permissions = db.Column(db.JSON)
-
-    def __repr__(self):
-        return f'<Role {self.name}>'
-
-
-class Tenant(BaseModel):
-    __tablename__ = 'tenants'
-
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
-    name = db.Column(db.String(100), nullable=False)
-    subdomain = db.Column(db.String(100), unique=True, nullable=False)
-    settings = db.Column(db.JSON)
-    is_active = db.Column(db.Boolean, default=True)
-
-    def __repr__(self):
-        return f'<Tenant {self.name}>'
