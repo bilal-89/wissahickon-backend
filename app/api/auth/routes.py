@@ -66,17 +66,25 @@ def login():
 @auth_bp.route('/google', methods=['POST'])
 def google_auth():
     data = request.get_json()
+    logger.info("Google auth request received")
 
     if not data or not data.get('token'):
+        logger.error("No token provided")
         raise APIError('Missing Google token', status_code=400)
 
-    # Verify Google token and get user info
     try:
-        google_user = verify_google_token(data['token'])
+        # Log token prefix for debugging
+        token = data['token']
+        logger.info(f"Token prefix: {token[:50]}...")
 
-        # Find existing user or create new one
+        # Verify Google token
+        google_user = verify_google_token(token)
+        logger.info(f"Google user verified: {google_user.get('email')}")
+
+        # Find or create user
         user = User.query.filter_by(google_id=google_user['sub']).first()
         if not user:
+            logger.info(f"Creating new user for {google_user.get('email')}")
             user = User(
                 email=google_user['email'],
                 google_id=google_user['sub'],
@@ -97,15 +105,14 @@ def google_auth():
             }
         )
 
-        user.update_last_login()
-
         return jsonify({
             'token': access_token,
             'user': user.to_dict()
         })
 
     except Exception as e:
-        raise APIError('Invalid Google token', status_code=401)
+        logger.exception("Error in google_auth")
+        raise APIError(str(e), status_code=401)
 
 
 @auth_bp.route('/me', methods=['GET'])
@@ -120,8 +127,32 @@ def get_current_user():
     return jsonify(user.to_dict())
 
 
-# Helper function for Google token verification
 def verify_google_token(token):
-    # Implementation needed - will add Google OAuth verification
-    pass
+    try:
+        client_id = os.getenv('GOOGLE_CLIENT_ID')
+        logger.info(f"Using client ID: {client_id}")
 
+        idinfo = id_token.verify_oauth2_token(
+            token,
+            requests.Request(),
+            client_id,
+            clock_skew_in_seconds=10
+        )
+
+        logger.info(f"Token verification successful for email: {idinfo.get('email')}")
+
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Wrong issuer.')
+
+        return {
+            'sub': idinfo['sub'],
+            'email': idinfo['email'],
+            'email_verified': idinfo.get('email_verified'),
+            'given_name': idinfo.get('given_name'),
+            'family_name': idinfo.get('family_name'),
+            'picture': idinfo.get('picture')
+        }
+
+    except Exception as e:
+        logger.error(f"Token verification failed: {str(e)}")
+        raise APIError(f'Token verification failed: {str(e)}', status_code=401)
