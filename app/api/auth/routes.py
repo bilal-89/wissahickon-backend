@@ -1,40 +1,34 @@
-# app/api/auth/routes.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from app.extensions import db
 from app.models.user import User
+from app.models.tenant import Tenant
+from app.models.role import Role  # Add this import
+
 from app.core.errors import APIError
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
-from datetime import timedelta
-from google.oauth2 import id_token
-from google.auth.transport import requests
-from app.core.errors import APIError
-import os
+from datetime import datetime
 from .google import verify_google_token
 import logging
+from app.core.middleware import TenantMiddleware
 
 logger = logging.getLogger(__name__)
-
-
 auth_bp = Blueprint('auth', __name__)
-print("Auth blueprint created:", auth_bp.url_prefix)  # Debug print
+
 
 @auth_bp.route('/login', methods=['POST'])
+@TenantMiddleware.tenant_required
 def login():
     logger.info("Login endpoint hit")
     try:
         data = request.get_json()
         logger.info(f"Received data: {data}")
 
-        if not data:
-            logger.error("No JSON data received")
-            raise APIError('No data provided', status_code=400)
-
-        if not data.get('email') or not data.get('password'):
+        if not data or not data.get('email') or not data.get('password'):
             logger.error("Missing email or password")
             raise APIError('Missing email or password', status_code=400)
 
+        # First try to find user in current tenant
         user = User.query.filter_by(email=data['email']).first()
-        logger.info(f"Found user: {user}")
 
         if not user:
             logger.error(f"No user found with email: {data['email']}")
@@ -44,12 +38,30 @@ def login():
             logger.error("Invalid password")
             raise APIError('Invalid email or password', status_code=401)
 
+        if not user.is_active:
+            logger.error("User is inactive")
+            raise APIError('Account is inactive', status_code=401)
+
+        # Check if user has role in current tenant
+        tenant_role = user.get_role_for_tenant(g.tenant)
+        if not tenant_role:
+            logger.error(f"User has no role in tenant: {g.tenant.subdomain}")
+            raise APIError('No access to this tenant', status_code=403)
+
+        # Update last login
+        user.update_last_login()
+
+        # Get or set primary tenant role if none exists
+        if not user.primary_tenant_role:
+            user.add_tenant_role(g.tenant, tenant_role, is_primary=True)
+
         token = create_access_token(
             identity=user.id,
             additional_claims={
                 'email': user.email,
-                'role': user.role.name if user.role else None,
-                'tenant_id': user.tenant_id
+                'tenant_id': g.tenant.id,
+                'tenant_subdomain': g.tenant.subdomain,
+                'role': tenant_role.name
             }
         )
         logger.info("Token created successfully")
@@ -58,31 +70,29 @@ def login():
             'token': token,
             'user': user.to_dict()
         })
+
     except Exception as e:
         logger.exception("Error in login endpoint")
         raise
 
 
 @auth_bp.route('/google', methods=['POST'])
+@TenantMiddleware.tenant_required
 def google_auth():
-    data = request.get_json()
     logger.info("Google auth request received")
+    data = request.get_json()
 
     if not data or not data.get('token'):
         logger.error("No token provided")
         raise APIError('Missing Google token', status_code=400)
 
     try:
-        # Log token prefix for debugging
-        token = data['token']
-        logger.info(f"Token prefix: {token[:50]}...")
-
-        # Verify Google token
-        google_user = verify_google_token(token)
+        google_user = verify_google_token(data['token'])
         logger.info(f"Google user verified: {google_user.get('email')}")
 
         # Find or create user
         user = User.query.filter_by(google_id=google_user['sub']).first()
+
         if not user:
             logger.info(f"Creating new user for {google_user.get('email')}")
             user = User(
@@ -95,18 +105,28 @@ def google_auth():
             db.session.add(user)
             db.session.commit()
 
-        # Create access token
-        access_token = create_access_token(
+        # Check or create tenant role
+        tenant_role = user.get_role_for_tenant(g.tenant)
+        if not tenant_role:
+            # You might want to add logic here to determine the appropriate role
+            default_role = Role.query.filter_by(name='user', tenant_id=g.tenant.id).first()
+            if default_role:
+                user.add_tenant_role(g.tenant, default_role, is_primary=not bool(user.primary_tenant_role))
+
+        user.update_last_login()
+
+        token = create_access_token(
             identity=user.id,
             additional_claims={
                 'email': user.email,
-                'role': user.role.name if user.role else None,
-                'tenant_id': user.tenant_id
+                'tenant_id': g.tenant.id,
+                'tenant_subdomain': g.tenant.subdomain,
+                'role': tenant_role.name if tenant_role else None
             }
         )
 
         return jsonify({
-            'token': access_token,
+            'token': token,
             'user': user.to_dict()
         })
 
@@ -117,42 +137,52 @@ def google_auth():
 
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
+@TenantMiddleware.tenant_required
 def get_current_user():
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = User.query.get_or_404(user_id)
 
-    if not user:
-        raise APIError('User not found', status_code=404)
+    # Verify user has access to current tenant
+    tenant_role = user.get_role_for_tenant(g.tenant)
+    if not tenant_role:
+        raise APIError('No access to this tenant', status_code=403)
 
     return jsonify(user.to_dict())
 
 
-def verify_google_token(token):
+@auth_bp.route('/switch-tenant', methods=['POST'])
+@jwt_required()
+def switch_tenant():
+    """Switch user's primary tenant"""
     try:
-        client_id = os.getenv('GOOGLE_CLIENT_ID')
-        logger.info(f"Using client ID: {client_id}")
+        user_id = get_jwt_identity()
+        data = request.get_json()
 
-        idinfo = id_token.verify_oauth2_token(
-            token,
-            requests.Request(),
-            client_id,
-            clock_skew_in_seconds=10
+        if not data or not data.get('tenant_id'):
+            raise APIError('tenant_id is required', status_code=400)
+
+        user = User.query.get_or_404(user_id)
+        new_tenant = Tenant.query.get_or_404(data['tenant_id'])
+
+        user.switch_primary_tenant(new_tenant)
+
+        # Create new token with updated tenant info
+        tenant_role = user.get_role_for_tenant(new_tenant)
+        token = create_access_token(
+            identity=user.id,
+            additional_claims={
+                'email': user.email,
+                'tenant_id': new_tenant.id,
+                'tenant_subdomain': new_tenant.subdomain,
+                'role': tenant_role.name if tenant_role else None
+            }
         )
 
-        logger.info(f"Token verification successful for email: {idinfo.get('email')}")
-
-        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-            raise ValueError('Wrong issuer.')
-
-        return {
-            'sub': idinfo['sub'],
-            'email': idinfo['email'],
-            'email_verified': idinfo.get('email_verified'),
-            'given_name': idinfo.get('given_name'),
-            'family_name': idinfo.get('family_name'),
-            'picture': idinfo.get('picture')
-        }
+        return jsonify({
+            'token': token,
+            'user': user.to_dict()
+        })
 
     except Exception as e:
-        logger.error(f"Token verification failed: {str(e)}")
-        raise APIError(f'Token verification failed: {str(e)}', status_code=401)
+        logger.exception("Error in switch_tenant")
+        raise APIError(str(e), status_code=400)

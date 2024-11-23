@@ -7,12 +7,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def get_google_client_id():
+    """
+    Get Google OAuth client ID from environment variables.
+    Separated into its own function to make it easier to mock in tests.
+    """
+    client_id = os.getenv('GOOGLE_CLIENT_ID')
+    if not client_id:
+        raise APIError('Google OAuth not configured', status_code=500)
+    return client_id
+
 def verify_google_token(token):
+    """
+    Verify Google OAuth token and return user information
+    """
     try:
-        client_id = os.getenv('GOOGLE_CLIENT_ID')
+        client_id = get_google_client_id()
         logger.info(f"Using client ID: {client_id}")
-        if not client_id:
-            raise APIError('Google OAuth not configured', status_code=500)
 
         try:
             idinfo = id_token.verify_oauth2_token(

@@ -19,6 +19,13 @@ def get_secret(secret_id, default_value):
         logger.warning(f"Could not load secret {secret_id}: {e}")
         return default_value
 
+def get_db_url(db_name):
+    user = os.getenv('DB_USER', 'postgres')
+    password = os.getenv('DB_PASSWORD', 'PostgresDev2024!')
+    host = os.getenv('DB_HOST', 'localhost')
+    port = os.getenv('DB_PORT', '5432')
+    return f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
+
 class BaseConfig:
     # Basic configuration
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -31,9 +38,8 @@ class BaseConfig:
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
-    TESTING = True  # Add this line
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'postgresql://localhost/app_dev')
-    SQLALCHEMY_ECHO = True  # Add this line for SQL logging
+    SQLALCHEMY_DATABASE_URI = get_db_url('wis_dev')
+    SQLALCHEMY_ECHO = True
 
 
 class ProductionConfig(BaseConfig):
@@ -43,7 +49,9 @@ class ProductionConfig(BaseConfig):
 
 class TestingConfig(BaseConfig):
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = 'postgresql://localhost/app_test'
+    SQLALCHEMY_DATABASE_URI = get_db_url('app_test')
+    SQLALCHEMY_ECHO = True
+    WTF_CSRF_ENABLED = False
 
 
 config_by_name = {
