@@ -77,3 +77,36 @@ class TenantMiddleware:
     def get_current_tenant():
         """Helper to get current tenant from context"""
         return getattr(g, 'tenant', None)
+
+    @staticmethod
+    def tenant_required(f):
+        """Decorator to enforce tenant context for routes"""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            tenant = TenantMiddleware.get_tenant_from_request()
+
+            if not tenant:
+                if current_app.debug:
+                    raise TenantNotFoundError(
+                        "No valid tenant found. In development, either: "
+                        "1) Set X-Tenant-ID header, or "
+                        "2) Create a tenant in the database"
+                    )
+                return {'error': 'Invalid tenant'}, 404
+
+            if not tenant.is_active:
+                if current_app.debug:
+                    raise InactiveTenantError(f"Tenant {tenant.name} is not active")
+                return {'error': 'Invalid tenant'}, 404
+
+            # Set both g.tenant and g.current_tenant for compatibility
+            g.tenant = tenant
+            g.current_tenant = tenant  # Add this line
+            return f(*args, **kwargs)
+
+        return decorated
+
+    @staticmethod
+    def get_current_tenant():
+        """Helper to get current tenant from context"""
+        return getattr(g, 'tenant', None) or getattr(g, 'current_tenant', None)

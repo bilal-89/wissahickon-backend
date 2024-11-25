@@ -15,3 +15,13 @@ class Tenant(BaseModel):
 
     # Add relationship to UserTenantRole
     user_roles = db.relationship('UserTenantRole', backref='tenant', lazy='dynamic')
+
+    def to_dict(self):
+        """Convert tenant to dictionary representation"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'subdomain': self.subdomain,
+            'settings': self.settings,
+            'is_active': self.is_active
+        }

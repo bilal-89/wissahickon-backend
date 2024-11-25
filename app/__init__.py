@@ -6,6 +6,11 @@ from flask_cors import CORS
 from .extensions import db
 from .config import config_by_name
 from .core.errors import APIError
+from .core.exceptions import PermissionDenied  # Add this import
+from .api.tenant import tenant_bp
+from .api.auth.routes import auth_bp
+from .api.user import user_bp
+
 import logging
 
 # Setup logging
@@ -72,6 +77,14 @@ def create_app(config_name='development'):
             'message': str(error)
         }), error.status_code
 
+    @app.errorhandler(PermissionDenied)  # Add this handler
+    def handle_permission_denied(error):
+        logger.error(f"Permission Denied: {str(error)}")
+        return jsonify({
+            'error': 'Permission Denied',
+            'message': str(error)
+        }), 403
+
     # Request logging
     @app.before_request
     def log_request_info():
@@ -82,8 +95,10 @@ def create_app(config_name='development'):
             logger.info(f"Request Body: {request.get_json(silent=True)}")
 
     # Register blueprints
-    from .api.auth.routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(tenant_bp, url_prefix='/api/tenants')
+    app.register_blueprint(user_bp, url_prefix='/api/users')  # Add this line
+
 
     # Log registered routes
     logger.info("Registered routes:")
