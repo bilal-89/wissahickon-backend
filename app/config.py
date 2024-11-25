@@ -23,7 +23,7 @@ def get_db_url(db_name):
     user = os.getenv('DB_USER', 'postgres')
     password = os.getenv('DB_PASSWORD', 'PostgresDev2024!')
     host = os.getenv('DB_HOST', 'localhost')
-    port = os.getenv('DB_PORT', '5432')
+    port = os.getenv('DB_PORT', '5433')
     return f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
 
 class BaseConfig:
