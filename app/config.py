@@ -8,19 +8,25 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def get_secret(secret_id, default_value):
+    """Get secret from Secret Manager or return default value"""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/wissahickon-dev/secrets/{secret_id}/versions/latest"
+        response = client.access_secret_version(request={"name": name})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        logger.warning(f"Could not load secret {secret_id}: {e}")
+        return default_value
+
+def get_db_url(db_name):
+    user = os.getenv('DB_USER', 'postgres')
+    password = os.getenv('DB_PASSWORD', 'PostgresDev2024!')
+    host = os.getenv('DB_HOST', 'localhost')
+    port = os.getenv('DB_PORT', '5432')
+    return f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
 
 class BaseConfig:
-    def get_secret(secret_id, default_value):
-        """Get secret from Secret Manager or return default value"""
-        try:
-            client = secretmanager.SecretManagerServiceClient()
-            name = f"projects/wissahickon-dev/secrets/{secret_id}/versions/latest"
-            response = client.access_secret_version(request={"name": name})
-            return response.payload.data.decode("UTF-8")
-        except Exception as e:
-            logger.warning(f"Could not load secret {secret_id}: {e}")
-            return default_value
-
     # Basic configuration
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
@@ -32,7 +38,8 @@ class BaseConfig:
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'postgresql://localhost/app_dev')
+    SQLALCHEMY_DATABASE_URI = get_db_url('wis_dev')
+    SQLALCHEMY_ECHO = True
 
 
 class ProductionConfig(BaseConfig):
@@ -42,7 +49,9 @@ class ProductionConfig(BaseConfig):
 
 class TestingConfig(BaseConfig):
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = 'postgresql://localhost/app_test'
+    SQLALCHEMY_DATABASE_URI = get_db_url('app_test')
+    SQLALCHEMY_ECHO = True
+    WTF_CSRF_ENABLED = False
 
 
 config_by_name = {
@@ -50,7 +59,6 @@ config_by_name = {
     'production': ProductionConfig,
     'testing': TestingConfig
 }
-
 
 def get_config():
     env = os.getenv('FLASK_ENV', 'development')
