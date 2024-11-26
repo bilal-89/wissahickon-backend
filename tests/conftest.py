@@ -5,6 +5,8 @@ from uuid import uuid4
 import pytest
 from app import create_app
 from app.extensions import db
+from app.models.settings import Settings
+from flask_jwt_extended import create_access_token
 
 
 @pytest.fixture(scope='session')
@@ -138,4 +140,33 @@ def second_tenant(app, test_tenant, test_user_with_role, test_role):
     db.session.query(UserTenantRole).filter_by(tenant_id=tenant.id).delete()
     db.session.delete(role)
     db.session.delete(tenant)
+    db.session.commit()
+
+
+@pytest.fixture
+def auth_headers(test_user_with_role):
+    """Create authentication headers with JWT token"""
+    token = create_access_token(identity=test_user_with_role.id)
+    return {'Authorization': f'Bearer {token}'}
+
+@pytest.fixture
+def test_settings(test_tenant):
+    """Create test settings for a tenant"""
+    settings = Settings(
+        owner_type='tenant',
+        owner_id=test_tenant.id,
+        settings={
+            'theme': 'light',
+            'notifications': True
+        }
+    )
+    db.session.add(settings)
+    db.session.commit()
+    return settings
+
+# Clean up settings after tests
+@pytest.fixture(autouse=True)
+def cleanup_settings():
+    yield
+    Settings.query.delete()
     db.session.commit()

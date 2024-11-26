@@ -10,6 +10,7 @@ from .core.exceptions import PermissionDenied  # Add this import
 from .api.tenant import tenant_bp
 from .api.auth.routes import auth_bp
 from .api.user import user_bp
+from .api.settings.routes import settings_bp
 
 import logging
 
@@ -98,7 +99,7 @@ def create_app(config_name='development'):
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(tenant_bp, url_prefix='/api/tenants')
     app.register_blueprint(user_bp, url_prefix='/api/users')  # Add this line
-
+    app.register_blueprint(settings_bp, url_prefix='/api/settings')  # Add this line
 
     # Log registered routes
     logger.info("Registered routes:")
