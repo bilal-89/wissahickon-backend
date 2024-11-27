@@ -11,6 +11,7 @@ from app.core.middleware import TenantMiddleware
 import logging
 from uuid import uuid4
 from . import user_bp
+from ...core.monitoring import capture_error
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,7 @@ def get_user(user_id):
 @user_bp.route('/<user_id>', methods=['PUT'])
 @jwt_required()
 @TenantMiddleware.tenant_required
+@capture_error
 @require_permission(Permission.MANAGE_USERS)
 def update_user(user_id):
     """Update user details"""

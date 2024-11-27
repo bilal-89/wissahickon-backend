@@ -1,6 +1,8 @@
 # app/api/settings/routes.py
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
+
+from ...core.monitoring import capture_error
 from ...models.settings import Settings
 from ...core.errors import APIError
 from ...extensions import db
@@ -47,6 +49,7 @@ def update_settings(tenant_id):
 
 
 @settings_bp.route('/tenant/<tenant_id>/<key>', methods=['PUT'])
+@capture_error
 @jwt_required()
 def update_setting(tenant_id, key):
     """Update a single setting"""

@@ -10,12 +10,14 @@ from datetime import datetime
 from .google import verify_google_token
 import logging
 from app.core.middleware import TenantMiddleware
+from ...core.monitoring import capture_error
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
 
 
 @auth_bp.route('/login', methods=['POST'])
+@capture_error
 @TenantMiddleware.tenant_required
 def login():
     logger.info("Login endpoint hit")
@@ -77,6 +79,7 @@ def login():
 
 
 @auth_bp.route('/google', methods=['POST'])
+@capture_error
 @TenantMiddleware.tenant_required
 def google_auth():
     logger.info("Google auth request received")

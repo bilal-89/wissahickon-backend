@@ -11,6 +11,9 @@ from .api.tenant import tenant_bp
 from .api.auth.routes import auth_bp
 from .api.user import user_bp
 from .api.settings.routes import settings_bp
+from app.api.health.routes import health_bp
+from app.core.monitoring import init_sentry
+
 
 import logging
 
@@ -28,6 +31,10 @@ def create_app(config_name='development'):
     db.init_app(app)
     jwt = JWTManager(app)
     CORS(app)
+
+    init_sentry(app)
+
+
 
     # Initialize migrations
     migrate = Migrate(app, db)
@@ -100,7 +107,7 @@ def create_app(config_name='development'):
     app.register_blueprint(tenant_bp, url_prefix='/api/tenants')
     app.register_blueprint(user_bp, url_prefix='/api/users')  # Add this line
     app.register_blueprint(settings_bp, url_prefix='/api/settings')  # Add this line
-
+    app.register_blueprint(health_bp, url_prefix='/api')
     # Log registered routes
     logger.info("Registered routes:")
     for rule in app.url_map.iter_rules():

@@ -1,5 +1,7 @@
 from flask import Blueprint, jsonify, request, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
+
+from app.core.monitoring import capture_error
 from app.extensions import db
 from app.models import User, Tenant, Role, UserTenantRole
 from app.core.errors import APIError
@@ -48,6 +50,7 @@ def list_tenants():
 
 @tenant_bp.route('', methods=['POST'])
 @jwt_required()
+@capture_error
 @require_permission(Permission.MANAGE_TENANT)
 def create_tenant():
     """Create new tenant"""
@@ -180,6 +183,7 @@ def list_tenant_roles(tenant_id):
 
 @tenant_bp.route('/<tenant_id>/roles', methods=['POST'])
 @jwt_required()
+@capture_error
 @require_permission(Permission.MANAGE_ROLES)
 def create_tenant_role(tenant_id):
     """Create a new role in the tenant"""
