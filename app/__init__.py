@@ -3,6 +3,8 @@ from flask import Flask, jsonify, request
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
+
+from .core.security import sanitize_request
 from .extensions import db
 from .config import config_by_name
 from .core.errors import APIError
@@ -101,6 +103,16 @@ def create_app(config_name='development'):
         logger.info(f"Request Headers: {dict(request.headers)}")
         if request.is_json:
             logger.info(f"Request Body: {request.get_json(silent=True)}")
+
+    @app.before_request
+    @sanitize_request(exempt_paths=[
+        r'/api/webhooks/.*',
+        r'/api/files/upload',
+        r'/api/health'
+    ])
+    def sanitize_api_requests():
+        if request.path.startswith('/api/'):
+            return None
 
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
