@@ -4,7 +4,7 @@ from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 
-from .core.security import sanitize_request
+from .core.security.sanitization import sanitize_request
 from .extensions import db
 from .config import config_by_name
 from .core.errors import APIError

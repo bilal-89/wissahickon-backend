@@ -1,10 +1,11 @@
+# app/api/auth/routes.py
 from flask import Blueprint, request, jsonify, g
 from app.extensions import db
 from app.models.user import User
 from app.models.tenant import Tenant
-from app.models.role import Role  # Add this import
-
+from app.models.role import Role
 from app.core.errors import APIError
+from app.core.audit import audit_action
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from datetime import datetime
 from .google import verify_google_token
@@ -19,6 +20,7 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/login', methods=['POST'])
 @capture_error
 @TenantMiddleware.tenant_required
+@audit_action('login_attempt', 'auth')
 def login():
     logger.info("Login endpoint hit")
     try:
@@ -81,6 +83,7 @@ def login():
 @auth_bp.route('/google', methods=['POST'])
 @capture_error
 @TenantMiddleware.tenant_required
+@audit_action('google_auth', 'auth')
 def google_auth():
     logger.info("Google auth request received")
     data = request.get_json()
@@ -111,7 +114,6 @@ def google_auth():
         # Check or create tenant role
         tenant_role = user.get_role_for_tenant(g.tenant)
         if not tenant_role:
-            # You might want to add logic here to determine the appropriate role
             default_role = Role.query.filter_by(name='user', tenant_id=g.tenant.id).first()
             if default_role:
                 user.add_tenant_role(g.tenant, default_role, is_primary=not bool(user.primary_tenant_role))
@@ -141,6 +143,7 @@ def google_auth():
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 @TenantMiddleware.tenant_required
+@audit_action('get_profile', 'auth')
 def get_current_user():
     user_id = get_jwt_identity()
     user = User.query.get_or_404(user_id)
@@ -155,6 +158,7 @@ def get_current_user():
 
 @auth_bp.route('/switch-tenant', methods=['POST'])
 @jwt_required()
+@audit_action('switch_tenant', 'auth', lambda r: r.get_json().get('tenant_id'))
 def switch_tenant():
     """Switch user's primary tenant"""
     try:

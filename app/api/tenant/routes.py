@@ -1,12 +1,13 @@
+# app/api/tenant/routes.py
 from flask import Blueprint, jsonify, request, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
-
 from app.core.monitoring import capture_error
 from app.extensions import db
 from app.models import User, Tenant, Role, UserTenantRole
 from app.core.errors import APIError
 from app.core.permissions import require_permission
 from app.core.constants import Permission
+from app.core.audit import audit_action
 import logging
 from uuid import uuid4
 
@@ -16,7 +17,8 @@ tenant_bp = Blueprint('tenant', __name__)
 
 @tenant_bp.route('', methods=['GET'])
 @jwt_required()
-@require_permission(Permission.VIEW_TENANT)  # This decorator should enforce the permission
+@require_permission(Permission.VIEW_TENANT)
+@audit_action('list', 'tenants')
 def list_tenants():
     """List tenants user belongs to"""
     try:
@@ -52,6 +54,7 @@ def list_tenants():
 @jwt_required()
 @capture_error
 @require_permission(Permission.MANAGE_TENANT)
+@audit_action('create', 'tenant', lambda r: r.get_json().get('id'))
 def create_tenant():
     """Create new tenant"""
     try:
@@ -80,9 +83,10 @@ def create_tenant():
             raise APIError('Subdomain already in use', status_code=400)
 
         try:
+            tenant_id = str(uuid4())
             # Create new tenant
             new_tenant = Tenant(
-                id=str(uuid4()),
+                id=tenant_id,
                 name=data['name'],
                 subdomain=data['subdomain'],
                 settings=data.get('settings', {}),
@@ -129,6 +133,7 @@ def create_tenant():
 @tenant_bp.route('/<tenant_id>', methods=['GET'])
 @jwt_required()
 @require_permission(Permission.VIEW_TENANT)
+@audit_action('view', 'tenant', lambda r: r.view_args.get('tenant_id'))
 def get_tenant(tenant_id):
     """Get tenant details if user has access"""
     try:
@@ -148,6 +153,7 @@ def get_tenant(tenant_id):
 @tenant_bp.route('/<tenant_id>/users', methods=['GET'])
 @jwt_required()
 @require_permission(Permission.VIEW_USERS)
+@audit_action('list_users', 'tenant', lambda r: r.view_args.get('tenant_id'))
 def list_tenant_users(tenant_id):
     """List users in a tenant"""
     try:
@@ -166,6 +172,7 @@ def list_tenant_users(tenant_id):
 @tenant_bp.route('/<tenant_id>/roles', methods=['GET'])
 @jwt_required()
 @require_permission(Permission.VIEW_ROLES)
+@audit_action('list_roles', 'tenant', lambda r: r.view_args.get('tenant_id'))
 def list_tenant_roles(tenant_id):
     """List roles in a tenant"""
     try:
@@ -185,6 +192,7 @@ def list_tenant_roles(tenant_id):
 @jwt_required()
 @capture_error
 @require_permission(Permission.MANAGE_ROLES)
+@audit_action('create_role', 'tenant', lambda r: r.view_args.get('tenant_id'))
 def create_tenant_role(tenant_id):
     """Create a new role in the tenant"""
     try:
