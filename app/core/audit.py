@@ -4,6 +4,8 @@ from flask import request, g, current_app
 from typing import Optional, Dict, Any, Callable
 from app.models.audit_log import AuditLog
 from app.core.security import get_current_user_id
+from app.extensions import db
+from uuid import uuid4
 import json
 
 
@@ -43,38 +45,42 @@ def audit_action(
     def decorator(f: Callable):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # Get request context
-            tenant_id = getattr(g, 'tenant_id', None)
-            user_id = get_current_user_id()
-
-            # Execute the original function
+            # Execute the original function first
             response = f(*args, **kwargs)
 
             try:
-                # Get entity ID if provided
-                entity_id = get_entity_id(response) if get_entity_id else None
+                # Ensure the main transaction is committed before audit logging
+                db.session.commit()
 
-                # Create audit log
-                AuditLog.log_action(
-                    action=action,
-                    entity_type=entity_type,
-                    entity_id=entity_id,
-                    changes=request.get_json() if request.is_json else None,
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    ip_address=request.remote_addr,
-                    user_agent=request.user_agent.string,
-                    endpoint=request.endpoint,
-                    metadata={
-                        'method': request.method,
-                        'path': request.path,
-                        'args': dict(request.args),
-                        'status_code': getattr(response, 'status_code', None)
-                    }
-                )
+                # Now create audit log in a separate transaction
+                try:
+                    tenant_id = getattr(g, 'tenant', None).id if hasattr(g, 'tenant') else None
+                    user_id = get_current_user_id()
+                    entity_id = get_entity_id(response) if get_entity_id else None
+
+                    # Start a new transaction for audit logging
+                    db.session.begin_nested()
+
+                    AuditLog.create(
+                        action=action,
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        changes=request.get_json() if request.is_json else None,
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        ip_address=request.remote_addr,
+                        user_agent=request.user_agent.string,
+                        endpoint=request.endpoint
+                    )
+
+                    db.session.commit()
+                except Exception as e:
+                    current_app.logger.error(f"Error creating audit log: {str(e)}")
+                    db.session.rollback()
+
             except Exception as e:
-                # Log error but don't disrupt the request
-                current_app.logger.error(f"Error creating audit log: {str(e)}")
+                current_app.logger.error(f"Error in audit logging: {str(e)}")
+                # Don't re-raise - audit failure shouldn't fail the main operation
 
             return response
 
@@ -105,30 +111,41 @@ def audit_model_changes(model_class):
             result = f(*args, **kwargs)
 
             try:
+                # Ensure main transaction is committed
+                db.session.commit()
+
                 # Get object state after changes
                 if isinstance(result, model_class):
-                    after_state = result.to_dict()
-                    entity_id = str(result.id)
+                    try:
+                        db.session.begin_nested()
 
-                    # Calculate changes
-                    changes = track_changes(before_state, after_state) if before_state else None
+                        after_state = result.to_dict()
+                        entity_id = str(result.id)
 
-                    # Create audit log
-                    AuditLog.log_action(
-                        action='update' if before_state else 'create',
-                        entity_type=model_class.__name__.lower(),
-                        entity_id=entity_id,
-                        changes=changes,
-                        tenant_id=getattr(g, 'tenant_id', None),
-                        user_id=get_current_user_id(),
-                        metadata={
-                            'model': model_class.__name__,
-                            'operation': 'update' if before_state else 'create'
-                        }
-                    )
+                        # Calculate changes
+                        changes = track_changes(before_state, after_state) if before_state else None
+
+                        # Create audit log
+                        AuditLog.create(
+                            action='update' if before_state else 'create',
+                            entity_type=model_class.__name__.lower(),
+                            entity_id=entity_id,
+                            changes=changes,
+                            tenant_id=getattr(g, 'tenant', None).id if hasattr(g, 'tenant') else None,
+                            user_id=get_current_user_id(),
+                            metadata={
+                                'model': model_class.__name__,
+                                'operation': 'update' if before_state else 'create'
+                            }
+                        )
+
+                        db.session.commit()
+                    except Exception as e:
+                        current_app.logger.error(f"Error creating model audit log: {str(e)}")
+                        db.session.rollback()
+
             except Exception as e:
-                # Log error but don't disrupt the operation
-                current_app.logger.error(f"Error auditing model changes: {str(e)}")
+                current_app.logger.error(f"Error in model audit logging: {str(e)}")
 
             return result
 

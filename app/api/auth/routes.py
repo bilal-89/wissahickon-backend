@@ -1,5 +1,5 @@
 # app/api/auth/routes.py
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from app.extensions import db
 from app.models.user import User
 from app.models.tenant import Tenant
@@ -12,6 +12,7 @@ from .google import verify_google_token
 import logging
 from app.core.middleware import TenantMiddleware
 from ...core.monitoring import capture_error
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
@@ -23,6 +24,8 @@ auth_bp = Blueprint('auth', __name__)
 @audit_action('login_attempt', 'auth')
 def login():
     logger.info("Login endpoint hit")
+
+    db.session.begin_nested()
     try:
         data = request.get_json()
         logger.info(f"Received data: {data}")
@@ -31,7 +34,6 @@ def login():
             logger.error("Missing email or password")
             raise APIError('Missing email or password', status_code=400)
 
-        # First try to find user in current tenant
         user = User.query.filter_by(email=data['email']).first()
 
         if not user:
@@ -46,16 +48,13 @@ def login():
             logger.error("User is inactive")
             raise APIError('Account is inactive', status_code=401)
 
-        # Check if user has role in current tenant
         tenant_role = user.get_role_for_tenant(g.tenant)
         if not tenant_role:
             logger.error(f"User has no role in tenant: {g.tenant.subdomain}")
             raise APIError('No access to this tenant', status_code=403)
 
-        # Update last login
         user.update_last_login()
 
-        # Get or set primary tenant role if none exists
         if not user.primary_tenant_role:
             user.add_tenant_role(g.tenant, tenant_role, is_primary=True)
 
@@ -70,12 +69,16 @@ def login():
         )
         logger.info("Token created successfully")
 
+        # Commit the transaction before returning
+        db.session.commit()
+
         return jsonify({
             'token': token,
             'user': user.to_dict()
         })
 
     except Exception as e:
+        db.session.rollback()
         logger.exception("Error in login endpoint")
         raise
 

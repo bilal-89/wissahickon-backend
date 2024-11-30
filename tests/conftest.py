@@ -7,12 +7,12 @@ from app import create_app
 from app.extensions import db
 from app.models.settings import Settings
 from flask_jwt_extended import create_access_token
+from flask import current_app
 
 
 @pytest.fixture(scope='session')
 def app():
     app = create_app('testing')
-
     print(f"Using database URL: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
     with app.app_context():
@@ -31,116 +31,153 @@ def client(app):
 @pytest.fixture
 def test_user(app):
     with app.app_context():
-        user = User(
-            id=str(uuid4()),
-            email="test@example.com",
-            first_name="Test",
-            last_name="User"
-        )
-        user.password = "password123"
-        db.session.add(user)
-        db.session.commit()
+        try:
+            db.session.begin_nested()
+            user = User(
+                id=str(uuid4()),
+                email="test@example.com",
+                first_name="Test",
+                last_name="User"
+            )
+            user.password = "password123"
+            db.session.add(user)
+            db.session.commit()
 
-        yield user
+            yield user
 
-        db.session.query(UserTenantRole).filter_by(user_id=user.id).delete()
-        db.session.delete(user)
-        db.session.commit()
+            db.session.begin_nested()
+            db.session.query(UserTenantRole).filter_by(user_id=user.id).delete()
+            db.session.delete(user)
+            db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f"Error in test_user fixture: {str(e)}")
+            db.session.rollback()
+            raise
 
 
 @pytest.fixture
 def test_tenant(app):
     with app.app_context():
-        tenant = Tenant(
-            id=str(uuid4()),
-            name="Test Business",
-            subdomain="test-business",
-            is_active=True
-        )
-        db.session.add(tenant)
-        db.session.commit()
+        try:
+            db.session.begin_nested()
+            tenant = Tenant(
+                id=str(uuid4()),
+                name="Test Business",
+                subdomain="test-business",
+                is_active=True
+            )
+            db.session.add(tenant)
+            db.session.commit()
 
-        yield tenant
+            yield tenant
 
-        db.session.query(UserTenantRole).filter_by(tenant_id=tenant.id).delete()
-        db.session.query(Role).filter_by(tenant_id=tenant.id).delete()
-        db.session.delete(tenant)
-        db.session.commit()
+            db.session.begin_nested()
+            db.session.query(UserTenantRole).filter_by(tenant_id=tenant.id).delete()
+            db.session.query(Role).filter_by(tenant_id=tenant.id).delete()
+            db.session.delete(tenant)
+            db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f"Error in test_tenant fixture: {str(e)}")
+            db.session.rollback()
+            raise
 
 
 @pytest.fixture
 def test_role(app, test_tenant):
     with app.app_context():
-        role = Role(
-            id=str(uuid4()),
-            name="admin",
-            tenant_id=test_tenant.id,
-            permissions={"admin": True}
-        )
-        db.session.add(role)
-        db.session.commit()
+        try:
+            db.session.begin_nested()
+            role = Role(
+                id=str(uuid4()),
+                name="admin",
+                tenant_id=test_tenant.id,
+                permissions={"admin": True}
+            )
+            db.session.add(role)
+            db.session.commit()
 
-        yield role
+            yield role
 
-        db.session.query(Role).filter_by(id=role.id).delete()
-        db.session.commit()
+            db.session.begin_nested()
+            db.session.query(Role).filter_by(id=role.id).delete()
+            db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f"Error in test_role fixture: {str(e)}")
+            db.session.rollback()
+            raise
 
 
 @pytest.fixture
 def test_user_with_role(app, test_user, test_tenant, test_role):
     """Assign the test user to the test tenant with the test role"""
     with app.app_context():
-        user_tenant_role = UserTenantRole(
-            user_id=test_user.id,
-            tenant_id=test_tenant.id,
-            role_id=test_role.id,
-            is_primary=True
-        )
-        db.session.add(user_tenant_role)
-        db.session.commit()
+        try:
+            db.session.begin_nested()
+            user_tenant_role = UserTenantRole(
+                user_id=test_user.id,
+                tenant_id=test_tenant.id,
+                role_id=test_role.id,
+                is_primary=True
+            )
+            db.session.add(user_tenant_role)
+            db.session.commit()
 
-        yield test_user
+            yield test_user
 
-        db.session.query(UserTenantRole).filter_by(user_id=test_user.id).delete()
-        db.session.commit()
+            db.session.begin_nested()
+            db.session.query(UserTenantRole).filter_by(user_id=test_user.id).delete()
+            db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f"Error in test_user_with_role fixture: {str(e)}")
+            db.session.rollback()
+            raise
 
 
 @pytest.fixture
 def second_tenant(app, test_tenant, test_user_with_role, test_role):
     """Create a second tenant and assign test_user to it with a different role"""
-    tenant = Tenant(
-        id=str(uuid4()),
-        name="Second Business",
-        subdomain="second-business",
-        is_active=True
-    )
-    db.session.add(tenant)
-    db.session.commit()
+    try:
+        db.session.begin_nested()
+        tenant = Tenant(
+            id=str(uuid4()),
+            name="Second Business",
+            subdomain="second-business",
+            is_active=True
+        )
+        db.session.add(tenant)
+        db.session.commit()
 
-    role = Role(
-        id=str(uuid4()),
-        name="user",
-        tenant_id=tenant.id,
-        permissions={"basic": True}
-    )
-    db.session.add(role)
-    db.session.commit()
+        db.session.begin_nested()
+        role = Role(
+            id=str(uuid4()),
+            name="user",
+            tenant_id=tenant.id,
+            permissions={"basic": True}
+        )
+        db.session.add(role)
+        db.session.commit()
 
-    tenant_role = UserTenantRole(
-        user_id=test_user_with_role.id,
-        tenant_id=tenant.id,
-        role_id=role.id,
-        is_primary=False
-    )
-    db.session.add(tenant_role)
-    db.session.commit()
+        db.session.begin_nested()
+        tenant_role = UserTenantRole(
+            user_id=test_user_with_role.id,
+            tenant_id=tenant.id,
+            role_id=role.id,
+            is_primary=False
+        )
+        db.session.add(tenant_role)
+        db.session.commit()
 
-    yield tenant
+        yield tenant
 
-    db.session.query(UserTenantRole).filter_by(tenant_id=tenant.id).delete()
-    db.session.delete(role)
-    db.session.delete(tenant)
-    db.session.commit()
+        db.session.begin_nested()
+        db.session.query(UserTenantRole).filter_by(tenant_id=tenant.id).delete()
+        db.session.delete(role)
+        db.session.delete(tenant)
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(f"Error in second_tenant fixture: {str(e)}")
+        db.session.rollback()
+        raise
 
 
 @pytest.fixture
@@ -149,24 +186,39 @@ def auth_headers(test_user_with_role):
     token = create_access_token(identity=test_user_with_role.id)
     return {'Authorization': f'Bearer {token}'}
 
+
 @pytest.fixture
 def test_settings(test_tenant):
     """Create test settings for a tenant"""
-    settings = Settings(
-        owner_type='tenant',
-        owner_id=test_tenant.id,
-        settings={
-            'theme': 'light',
-            'notifications': True
-        }
-    )
-    db.session.add(settings)
-    db.session.commit()
-    return settings
+    try:
+        db.session.begin_nested()
+        settings = Settings(
+            owner_type='tenant',
+            owner_id=test_tenant.id,
+            settings={
+                'theme': 'light',
+                'notifications': True
+            }
+        )
+        db.session.add(settings)
+        db.session.commit()
+        return settings
+    except Exception as e:
+        current_app.logger.error(f"Error in test_settings fixture: {str(e)}")
+        db.session.rollback()
+        raise
+
 
 # Clean up settings after tests
 @pytest.fixture(autouse=True)
 def cleanup_settings():
     yield
-    Settings.query.delete()
-    db.session.commit()
+    try:
+        db.session.begin_nested()
+        Settings.query.delete()
+        db.session.commit()
+    except Exception as e:
+        current_app.logger.error(f"Error in cleanup_settings: {str(e)}")
+        db.session.rollback()
+    finally:
+        db.session.close()
