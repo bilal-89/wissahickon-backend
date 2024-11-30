@@ -8,9 +8,11 @@ from app.core.errors import APIError
 from app.core.permissions import require_permission
 from app.core.constants import Permission
 from app.core.middleware import TenantMiddleware
+from app.core.audit import audit_action
 import logging
 from uuid import uuid4
 from . import user_bp
+from ...core.monitoring import capture_error
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ logger = logging.getLogger(__name__)
 @jwt_required()
 @TenantMiddleware.tenant_required
 @require_permission(Permission.VIEW_USERS)
+@audit_action('list', 'users')
 def list_users():
     """List users in current tenant with filtering options"""
     try:
@@ -54,6 +57,7 @@ def list_users():
 @jwt_required()
 @TenantMiddleware.tenant_required
 @require_permission(Permission.MANAGE_USERS)
+@audit_action('create', 'user', lambda r: r.get_json().get('id'))
 def create_user():
     """Create new user in current tenant"""
     try:
@@ -74,8 +78,9 @@ def create_user():
             raise APIError('Email already exists', status_code=400)
 
         # Create user
+        user_id = str(uuid4())
         new_user = User(
-            id=str(uuid4()),
+            id=user_id,
             email=data['email'],
             first_name=data['first_name'],
             last_name=data['last_name']
@@ -116,6 +121,7 @@ def create_user():
 @jwt_required()
 @TenantMiddleware.tenant_required
 @require_permission(Permission.VIEW_USERS)
+@audit_action('view', 'user', lambda r: r.view_args.get('user_id'))
 def get_user(user_id):
     """Get user details"""
     try:
@@ -138,7 +144,9 @@ def get_user(user_id):
 @user_bp.route('/<user_id>', methods=['PUT'])
 @jwt_required()
 @TenantMiddleware.tenant_required
+@capture_error
 @require_permission(Permission.MANAGE_USERS)
+@audit_action('update', 'user', lambda r: r.view_args.get('user_id'))
 def update_user(user_id):
     """Update user details"""
     try:
@@ -174,6 +182,7 @@ def update_user(user_id):
 @jwt_required()
 @TenantMiddleware.tenant_required
 @require_permission(Permission.MANAGE_USERS)
+@audit_action('update_role', 'user', lambda r: r.view_args.get('user_id'))
 def update_user_role(user_id):
     """Update user's role in current tenant"""
     try:

@@ -1,24 +1,30 @@
+# app/api/auth/routes.py
 from flask import Blueprint, request, jsonify, g
 from app.extensions import db
 from app.models.user import User
 from app.models.tenant import Tenant
-from app.models.role import Role  # Add this import
-
+from app.models.role import Role
 from app.core.errors import APIError
+from app.core.audit import audit_action
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
-from datetime import datetime
 from .google import verify_google_token
 import logging
 from app.core.middleware import TenantMiddleware
+from ...core.monitoring import capture_error
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
 
 
 @auth_bp.route('/login', methods=['POST'])
+@capture_error
 @TenantMiddleware.tenant_required
+@audit_action('login_attempt', 'auth')
 def login():
     logger.info("Login endpoint hit")
+
+    db.session.begin_nested()
     try:
         data = request.get_json()
         logger.info(f"Received data: {data}")
@@ -27,7 +33,6 @@ def login():
             logger.error("Missing email or password")
             raise APIError('Missing email or password', status_code=400)
 
-        # First try to find user in current tenant
         user = User.query.filter_by(email=data['email']).first()
 
         if not user:
@@ -42,16 +47,13 @@ def login():
             logger.error("User is inactive")
             raise APIError('Account is inactive', status_code=401)
 
-        # Check if user has role in current tenant
         tenant_role = user.get_role_for_tenant(g.tenant)
         if not tenant_role:
             logger.error(f"User has no role in tenant: {g.tenant.subdomain}")
             raise APIError('No access to this tenant', status_code=403)
 
-        # Update last login
         user.update_last_login()
 
-        # Get or set primary tenant role if none exists
         if not user.primary_tenant_role:
             user.add_tenant_role(g.tenant, tenant_role, is_primary=True)
 
@@ -66,18 +68,24 @@ def login():
         )
         logger.info("Token created successfully")
 
+        # Commit the transaction before returning
+        db.session.commit()
+
         return jsonify({
             'token': token,
             'user': user.to_dict()
         })
 
     except Exception as e:
+        db.session.rollback()
         logger.exception("Error in login endpoint")
         raise
 
 
 @auth_bp.route('/google', methods=['POST'])
+@capture_error
 @TenantMiddleware.tenant_required
+@audit_action('google_auth', 'auth')
 def google_auth():
     logger.info("Google auth request received")
     data = request.get_json()
@@ -108,7 +116,6 @@ def google_auth():
         # Check or create tenant role
         tenant_role = user.get_role_for_tenant(g.tenant)
         if not tenant_role:
-            # You might want to add logic here to determine the appropriate role
             default_role = Role.query.filter_by(name='user', tenant_id=g.tenant.id).first()
             if default_role:
                 user.add_tenant_role(g.tenant, default_role, is_primary=not bool(user.primary_tenant_role))
@@ -138,6 +145,7 @@ def google_auth():
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 @TenantMiddleware.tenant_required
+@audit_action('get_profile', 'auth')
 def get_current_user():
     user_id = get_jwt_identity()
     user = User.query.get_or_404(user_id)
@@ -152,6 +160,7 @@ def get_current_user():
 
 @auth_bp.route('/switch-tenant', methods=['POST'])
 @jwt_required()
+@audit_action('switch_tenant', 'auth', lambda r: r.get_json().get('tenant_id'))
 def switch_tenant():
     """Switch user's primary tenant"""
     try:
