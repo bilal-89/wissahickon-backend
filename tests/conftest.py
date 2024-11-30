@@ -8,6 +8,36 @@ from app.extensions import db
 from app.models.settings import Settings
 from flask_jwt_extended import create_access_token
 from flask import current_app
+from app.core.rate_limiter import RateLimiter
+import fakeredis
+
+@pytest.fixture(scope='session')
+def fake_redis():
+    """Create a fake Redis instance for testing"""
+    return fakeredis.FakeStrictRedis()
+
+@pytest.fixture(scope='session')
+def app(fake_redis):
+    """Create test Flask app with rate limiting support"""
+    app = create_app('testing')
+    app.config.update({
+        'REDIS_URL': 'redis://fake',  # Add Redis URL to config
+        'RATE_LIMIT_ENABLED': True    # Enable rate limiting in tests
+    })
+
+    # Initialize rate limiter with fake redis
+    limiter = RateLimiter(redis_url='redis://fake')
+    limiter.init_app(app)
+    limiter.redis = fake_redis  # Use our fake redis instance
+
+    print(f"Using database URL: {app.config['SQLALCHEMY_DATABASE_URI']}")
+
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
+        yield app
+        db.session.remove()
+        db.drop_all()
 
 
 @pytest.fixture(scope='session')
@@ -224,3 +254,5 @@ def cleanup_settings(app):
             db.session.rollback()
         finally:
             db.session.close()
+
+

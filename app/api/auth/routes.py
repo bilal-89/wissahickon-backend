@@ -1,5 +1,5 @@
 # app/api/auth/routes.py
-from flask import Blueprint, request, jsonify, g, current_app
+from flask import Blueprint, request, jsonify, g
 from app.extensions import db
 from app.models.user import User
 from app.models.tenant import Tenant
@@ -7,7 +7,6 @@ from app.models.role import Role
 from app.core.errors import APIError
 from app.core.audit import audit_action
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
-from datetime import datetime
 from .google import verify_google_token
 import logging
 from app.core.middleware import TenantMiddleware

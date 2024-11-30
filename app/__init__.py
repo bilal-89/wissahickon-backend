@@ -18,6 +18,7 @@ from .api.settings.routes import settings_bp
 from app.api.health.routes import health_bp
 from app.core.monitoring import init_sentry
 from app.api.metrics.routes import metrics_bp
+# from .core.rate_limiter import RateLimiter
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -34,14 +35,15 @@ def create_app(config_name='development'):
     jwt = JWTManager(app)
     init_security_headers(app)
     CORS(app)
-
     init_sentry(app)
+    # limiter = RateLimiter()
 
     # Initialize migrations
     migrate = Migrate(app, db)
 
     # Debug routes endpoint
     @app.route('/debug/routes')
+    # @limiter.limit('login', limit=5, period=60)
     def list_routes():
         routes = []
         for rule in app.url_map.iter_rules():
@@ -54,6 +56,7 @@ def create_app(config_name='development'):
 
     # Root endpoint
     @app.route('/')
+    # @limiter.limit('login', limit=5, period=60)
     def root():
         return jsonify({
             'service': 'Wissahickon Backend API',
