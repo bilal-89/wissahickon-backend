@@ -5,6 +5,8 @@ from app.extensions import db
 from redis import Redis
 from sqlalchemy import text
 import time
+from app.core.metrics import track_performance, capture_error
+
 
 health_bp = Blueprint('health', __name__)
 
@@ -30,6 +32,8 @@ def check_redis():
 
 
 @health_bp.route('/health')
+@track_performance
+@capture_error
 def health_check():
     """Basic health check endpoint"""
     start_time = time.time()

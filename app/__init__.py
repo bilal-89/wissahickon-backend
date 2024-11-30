@@ -1,10 +1,12 @@
 # app/__init__.py
+import logging
 from flask import Flask, jsonify, request
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 
 from .core.security.sanitization import sanitize_request
+from .core.security.security_headers import init_security_headers
 from .extensions import db
 from .config import config_by_name
 from .core.errors import APIError
@@ -15,9 +17,7 @@ from .api.user import user_bp
 from .api.settings.routes import settings_bp
 from app.api.health.routes import health_bp
 from app.core.monitoring import init_sentry
-
-
-import logging
+from app.api.metrics.routes import metrics_bp
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -32,11 +32,10 @@ def create_app(config_name='development'):
     # Initialize extensions
     db.init_app(app)
     jwt = JWTManager(app)
+    init_security_headers(app)
     CORS(app)
 
     init_sentry(app)
-
-
 
     # Initialize migrations
     migrate = Migrate(app, db)
@@ -120,6 +119,8 @@ def create_app(config_name='development'):
     app.register_blueprint(user_bp, url_prefix='/api/users')  # Add this line
     app.register_blueprint(settings_bp, url_prefix='/api/settings')  # Add this line
     app.register_blueprint(health_bp, url_prefix='/api')
+    app.register_blueprint(metrics_bp, url_prefix='/api/metrics')
+
     # Log registered routes
     logger.info("Registered routes:")
     for rule in app.url_map.iter_rules():

@@ -211,14 +211,16 @@ def test_settings(test_tenant):
 
 # Clean up settings after tests
 @pytest.fixture(autouse=True)
-def cleanup_settings():
+def cleanup_settings(app):
+    """Clean up settings after each test"""
     yield
-    try:
-        db.session.begin_nested()
-        Settings.query.delete()
-        db.session.commit()
-    except Exception as e:
-        current_app.logger.error(f"Error in cleanup_settings: {str(e)}")
-        db.session.rollback()
-    finally:
-        db.session.close()
+    with app.app_context():
+        try:
+            db.session.begin_nested()
+            Settings.query.delete()
+            db.session.commit()
+        except Exception as e:
+            current_app.logger.error(f"Error in cleanup_settings: {str(e)}")
+            db.session.rollback()
+        finally:
+            db.session.close()
