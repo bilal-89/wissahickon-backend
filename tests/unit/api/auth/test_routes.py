@@ -8,6 +8,39 @@ from app.models.user_tenant_role import UserTenantRole
 from app.extensions import db
 from unittest.mock import patch
 import json
+import fakeredis
+from app.core.rate_limiter import RateLimiter
+
+
+@pytest.fixture
+def rate_limiter(app):
+    """Create a rate limiter with fake Redis"""
+    app.config['RATE_LIMIT_ENABLED'] = True
+    app.config['REDIS_URL'] = 'redis://fake'
+
+    limiter = RateLimiter()
+    limiter.init_app(app)
+    # Use fake Redis for testing
+    limiter.redis = fakeredis.FakeStrictRedis()
+
+    # Store limiter on app for access in routes
+    app.rate_limiter = limiter
+    return limiter
+
+
+@pytest.fixture
+def fake_redis():
+    """Create a fake Redis instance for testing"""
+    return fakeredis.FakeStrictRedis()
+
+
+@pytest.fixture
+def rate_limiter(app, fake_redis):
+    """Create a rate limiter with fake Redis"""
+    limiter = RateLimiter(redis_url='redis://fake')
+    limiter.init_app(app)
+    limiter.redis = fake_redis
+    return limiter
 
 
 @pytest.fixture
@@ -104,6 +137,57 @@ class TestAuthRoutes:
         assert 'token' in data
         assert data['user']['email'] == test_user.email
         assert data['user']['primary_tenant']['subdomain'] == test_tenant.subdomain
+
+    def test_login_rate_limit(self, client, test_user, test_tenant, rate_limiter, fake_redis):
+        """Test that login endpoint is rate limited"""
+        # Clear any existing rate limit data
+        fake_redis.flushall()
+
+        headers = {'Host': f'{test_tenant.subdomain}.example.com'}
+
+        # Make 5 failed login attempts (which should be allowed)
+        for i in range(5):
+            response = client.post(
+                '/api/auth/login',
+                json={
+                    'email': 'test@example.com',
+                    'password': 'wrong_password'
+                },
+                headers=headers
+            )
+
+            # Should get unauthorized, not rate limited
+            assert response.status_code == 401
+            assert 'X-RateLimit-Remaining' in response.headers
+            remaining = int(response.headers['X-RateLimit-Remaining'])
+            assert remaining == 4 - i  # Should decrease with each request
+
+        # 6th attempt should be rate limited
+        response = client.post(
+            '/api/auth/login',
+            json={
+                'email': 'test@example.com',
+                'password': 'wrong_password'
+            },
+            headers=headers
+        )
+
+        # Verify rate limit response
+        assert response.status_code == 429
+        assert 'Rate limit exceeded' in response.get_json()['error']
+        assert 'Retry-After' in response.headers
+
+        # Verify successful login still blocked
+        response = client.post(
+            '/api/auth/login',
+            json={
+                'email': 'test@example.com',
+                'password': 'password123'  # Correct password
+            },
+            headers=headers
+        )
+
+        assert response.status_code == 429
 
     def test_login_wrong_tenant(self, client, test_user):
         # Create another tenant
@@ -278,4 +362,3 @@ class TestAuthRoutes:
             db.session.delete(role2)
             db.session.delete(tenant2)
             db.session.commit()
-

@@ -1,5 +1,5 @@
 # app/api/auth/routes.py
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from app.extensions import db
 from app.models.user import User
 from app.models.tenant import Tenant
@@ -11,15 +11,25 @@ from .google import verify_google_token
 import logging
 from app.core.middleware import TenantMiddleware
 from ...core.monitoring import capture_error
+from app.core.rate_limiter import RateLimiter
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
 
+# Initialize rate limiter
+limiter = RateLimiter()
+
+@auth_bp.record_once
+def on_register(state):
+    """Initialize rate limiter with app"""
+    limiter.init_app(state.app)
+
 
 @auth_bp.route('/login', methods=['POST'])
 @capture_error
-@TenantMiddleware.tenant_required
+@TenantMiddleware.tenant_required  # Tenant middleware first
+@limiter.limit('login', limit=5, period=60)  # Rate limiter after tenant context
 @audit_action('login_attempt', 'auth')
 def login():
     logger.info("Login endpoint hit")
