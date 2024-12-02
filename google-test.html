@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Sign-In Test</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body { padding: 20px; font-family: Arial; }
+        pre { background: #f5f5f5; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Google Sign-In Test</h2>
+
+    <div id="g_id_onload"
+         data-client_id="163693378760-bg1ibp92c3dhefdjrb9klae9dsaodjer.apps.googleusercontent.com"
+         data-callback="handleCredentialResponse">
+    </div>
+
+    <div class="g_id_signin"
+         data-type="standard">
+    </div>
+
+    <h3>Response:</h3>
+    <pre id="response"></pre>
+
+    <script>
+        function handleCredentialResponse(response) {
+            console.log('Google token:', response.credential);
+
+            // Display Google response
+            document.getElementById('response').textContent =
+                'Google Response:\n' + JSON.stringify(response, null, 2);
+
+            // Send to backend
+            fetch('http://localhost:5001/api/auth/google', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    token: response.credential
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('response').textContent +=
+                    '\n\nBackend Response:\n' + JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('response').textContent +=
+                    '\n\nError:\n' + JSON.stringify(error, null, 2);
+            });
+        }
+    </script>
+</body>
+</html>
