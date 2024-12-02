@@ -9,7 +9,7 @@ from typing import Optional
 class SecurityMixin:
     @property
     def password(self):
-        raise AttributeError('password is not a readable attribute')
+        raise AttributeError("password is not a readable attribute")
 
     @password.setter
     def password(self, password):
@@ -31,7 +31,7 @@ def get_current_user_id() -> Optional[str]:
             return str(user_id)
 
         # Fallback to context (for testing/non-JWT routes)
-        return getattr(g, 'user_id', None)
+        return getattr(g, "user_id", None)
     except Exception as e:
         current_app.logger.debug(f"Error getting current user: {str(e)}")
         return None
@@ -43,4 +43,4 @@ def set_current_user_id(user_id: str) -> None:
 
 
 # Export all the components
-__all__ = ['SecurityMixin', 'get_current_user_id', 'set_current_user_id']
+__all__ = ["SecurityMixin", "get_current_user_id", "set_current_user_id"]

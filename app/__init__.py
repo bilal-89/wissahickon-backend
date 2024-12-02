@@ -18,13 +18,15 @@ from .api.settings.routes import settings_bp
 from app.api.health.routes import health_bp
 from app.core.monitoring import init_sentry
 from app.api.metrics.routes import metrics_bp
+
 # from .core.rate_limiter import RateLimiter
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def create_app(config_name='development'):
+
+def create_app(config_name="development"):
     app = Flask(__name__)
 
     # Load config
@@ -42,60 +44,49 @@ def create_app(config_name='development'):
     migrate = Migrate(app, db)
 
     # Debug routes endpoint
-    @app.route('/debug/routes')
+    @app.route("/debug/routes")
     # @limiter.limit('login', limit=5, period=60)
     def list_routes():
         routes = []
         for rule in app.url_map.iter_rules():
-            routes.append({
-                'endpoint': rule.endpoint,
-                'methods': list(rule.methods),
-                'path': str(rule)
-            })
+            routes.append(
+                {"endpoint": rule.endpoint, "methods": list(rule.methods), "path": str(rule)}
+            )
         return jsonify(routes)
 
     # Root endpoint
-    @app.route('/')
+    @app.route("/")
     # @limiter.limit('login', limit=5, period=60)
     def root():
-        return jsonify({
-            'service': 'Wissahickon Backend API',
-            'version': '1.0.0',
-            'status': 'running'
-        })
+        return jsonify(
+            {"service": "Wissahickon Backend API", "version": "1.0.0", "status": "running"}
+        )
 
     # Register error handlers
     @app.errorhandler(404)
     def not_found_error(error):
         logger.error(f"404 Error: {request.url}")
-        return jsonify({
-            'error': 'Not Found',
-            'message': f"The requested URL {request.path} was not found"
-        }), 404
+        return (
+            jsonify(
+                {"error": "Not Found", "message": f"The requested URL {request.path} was not found"}
+            ),
+            404,
+        )
 
     @app.errorhandler(Exception)
     def handle_exception(error):
         logger.error(f"Unhandled Exception: {str(error)}", exc_info=True)
-        return jsonify({
-            'error': str(error.__class__.__name__),
-            'message': str(error)
-        }), 500
+        return jsonify({"error": str(error.__class__.__name__), "message": str(error)}), 500
 
     @app.errorhandler(APIError)
     def handle_api_error(error):
         logger.error(f"API Error: {str(error)}")
-        return jsonify({
-            'error': 'API Error',
-            'message': str(error)
-        }), error.status_code
+        return jsonify({"error": "API Error", "message": str(error)}), error.status_code
 
     @app.errorhandler(PermissionDenied)  # Add this handler
     def handle_permission_denied(error):
         logger.error(f"Permission Denied: {str(error)}")
-        return jsonify({
-            'error': 'Permission Denied',
-            'message': str(error)
-        }), 403
+        return jsonify({"error": "Permission Denied", "message": str(error)}), 403
 
     # Request logging
     @app.before_request
@@ -107,22 +98,18 @@ def create_app(config_name='development'):
             logger.info(f"Request Body: {request.get_json(silent=True)}")
 
     @app.before_request
-    @sanitize_request(exempt_paths=[
-        r'/api/webhooks/.*',
-        r'/api/files/upload',
-        r'/api/health'
-    ])
+    @sanitize_request(exempt_paths=[r"/api/webhooks/.*", r"/api/files/upload", r"/api/health"])
     def sanitize_api_requests():
-        if request.path.startswith('/api/'):
+        if request.path.startswith("/api/"):
             return None
 
     # Register blueprints
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(tenant_bp, url_prefix='/api/tenants')
-    app.register_blueprint(user_bp, url_prefix='/api/users')  # Add this line
-    app.register_blueprint(settings_bp, url_prefix='/api/settings')  # Add this line
-    app.register_blueprint(health_bp, url_prefix='/api')
-    app.register_blueprint(metrics_bp, url_prefix='/api/metrics')
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(tenant_bp, url_prefix="/api/tenants")
+    app.register_blueprint(user_bp, url_prefix="/api/users")  # Add this line
+    app.register_blueprint(settings_bp, url_prefix="/api/settings")  # Add this line
+    app.register_blueprint(health_bp, url_prefix="/api")
+    app.register_blueprint(metrics_bp, url_prefix="/api/metrics")
 
     # Log registered routes
     logger.info("Registered routes:")

@@ -8,7 +8,7 @@ from .user_tenant_role import UserTenantRole
 
 
 class User(BaseModel, SecurityMixin):
-    __tablename__ = 'users'
+    __tablename__ = "users"
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
     email = db.Column(db.String(255), nullable=False)
@@ -20,19 +20,19 @@ class User(BaseModel, SecurityMixin):
     last_login = db.Column(db.DateTime)
 
     # These will now be managed through UserTenantRole but kept for backwards compatibility
-    tenant_id = db.Column(db.String(36), db.ForeignKey('tenants.id'), nullable=True)
-    role_id = db.Column(db.String(36), db.ForeignKey('roles.id'), nullable=True)
+    tenant_id = db.Column(db.String(36), db.ForeignKey("tenants.id"), nullable=True)
+    role_id = db.Column(db.String(36), db.ForeignKey("roles.id"), nullable=True)
 
     # Add relationship to UserTenantRole
-    tenant_roles = db.relationship('UserTenantRole', backref='user', lazy='dynamic')
+    tenant_roles = db.relationship("UserTenantRole", backref="user", lazy="dynamic")
 
     __table_args__ = (
-        db.UniqueConstraint('email', 'tenant_id', name='uq_user_email_tenant'),
-        db.UniqueConstraint('google_id', 'tenant_id', name='uq_user_google_tenant'),
+        db.UniqueConstraint("email", "tenant_id", name="uq_user_email_tenant"),
+        db.UniqueConstraint("google_id", "tenant_id", name="uq_user_google_tenant"),
     )
 
     def __repr__(self):
-        return f'<User {self.email}>'
+        return f"<User {self.email}>"
 
     def add_tenant_role(self, tenant, role, is_primary=False):
         """Add a role for this user in a specific tenant"""
@@ -50,10 +50,7 @@ class User(BaseModel, SecurityMixin):
 
         # Create new tenant role relationship
         tenant_role = UserTenantRole(
-            user_id=self.id,
-            tenant_id=tenant.id,
-            role_id=role.id,
-            is_primary=is_primary
+            user_id=self.id, tenant_id=tenant.id, role_id=role.id, is_primary=is_primary
         )
 
         db.session.add(tenant_role)
@@ -91,27 +88,31 @@ class User(BaseModel, SecurityMixin):
         """Serialize user to dict with tenant/role information"""
         primary = self.primary_tenant_role
         basic_data = {
-            'id': self.id,
-            'email': self.email,
-            'first_name': self.first_name,
-            'last_name': self.last_name,
-            'is_active': self.is_active,
+            "id": self.id,
+            "email": self.email,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "is_active": self.is_active,
         }
 
         if primary:
-            basic_data['primary_tenant'] = {
-                'id': primary.tenant.id,
-                'name': primary.tenant.name,
-                'role': primary.role.name,
-                'subdomain': primary.tenant.subdomain
+            basic_data["primary_tenant"] = {
+                "id": primary.tenant.id,
+                "name": primary.tenant.name,
+                "role": primary.role.name,
+                "subdomain": primary.tenant.subdomain,
             }
 
-        basic_data['other_tenants'] = [{
-            'id': tr.tenant.id,
-            'name': tr.tenant.name,
-            'role': tr.role.name,
-            'subdomain': tr.tenant.subdomain
-        } for tr in self.get_tenant_roles() if not tr.is_primary]
+        basic_data["other_tenants"] = [
+            {
+                "id": tr.tenant.id,
+                "name": tr.tenant.name,
+                "role": tr.role.name,
+                "subdomain": tr.tenant.subdomain,
+            }
+            for tr in self.get_tenant_roles()
+            if not tr.is_primary
+        ]
 
         return basic_data
 

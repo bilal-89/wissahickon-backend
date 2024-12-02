@@ -10,7 +10,8 @@ class Settings(BaseModel):
     Flexible settings model that can be associated with either a tenant or a user.
     Uses JSON field for maximum flexibility in storing different types of settings.
     """
-    __tablename__ = 'settings'
+
+    __tablename__ = "settings"
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
     owner_type = db.Column(db.String(50), nullable=False)
@@ -18,9 +19,7 @@ class Settings(BaseModel):
     settings = db.Column(JSON, nullable=False, default=dict)
     is_active = db.Column(db.Boolean, default=True)
 
-    __table_args__ = (
-        db.Index('idx_settings_owner', owner_type, owner_id),
-    )
+    __table_args__ = (db.Index("idx_settings_owner", owner_type, owner_id),)
 
     def get_setting(self, key, default=None):
         """Get a specific setting value"""
@@ -51,8 +50,4 @@ class Settings(BaseModel):
     @classmethod
     def get_for_owner(cls, owner_type, owner_id):
         """Get settings for a specific owner"""
-        return cls.query.filter_by(
-            owner_type=owner_type,
-            owner_id=owner_id,
-            is_active=True
-        ).first()
+        return cls.query.filter_by(owner_type=owner_type, owner_id=owner_id, is_active=True).first()

@@ -14,6 +14,7 @@ cors = CORS()
 cache = Cache()
 limiter = Limiter(key_func=get_remote_address)
 
+
 def init_extensions(app):
     """Initialize all Flask extensions"""
     db.init_app(app)
