@@ -1,4 +1,5 @@
 # conftest.py
+from datetime import timedelta
 
 from app.models import User, Tenant, Role, UserTenantRole
 from uuid import uuid4
@@ -19,35 +20,14 @@ def fake_redis():
 
 
 @pytest.fixture(scope="session")
-def app(fake_redis):
-    """Create test Flask app with rate limiting support"""
-    app = create_app("testing")
-    app.config.update(
-        {
-            "REDIS_URL": "redis://fake",  # Add Redis URL to config
-            "RATE_LIMIT_ENABLED": True,  # Enable rate limiting in tests
-        }
-    )
-
-    # Initialize rate limiter with fake redis
-    limiter = RateLimiter(redis_url="redis://fake")
-    limiter.init_app(app)
-    limiter.redis = fake_redis  # Use our fake redis instance
-
-    print(f"Using database URL: {app.config['SQLALCHEMY_DATABASE_URI']}")
-
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
-
-
-@pytest.fixture(scope="session")
 def app():
     app = create_app("testing")
-    print(f"Using database URL: {app.config['SQLALCHEMY_DATABASE_URI']}")
+    app.config.update({
+        'JWT_SECRET_KEY': 'test-jwt-secret',
+        'JWT_ACCESS_TOKEN_EXPIRES': timedelta(hours=1),
+        'JWT_TOKEN_LOCATION': ['headers'],
+        'JWT_COOKIE_CSRF_PROTECT': False
+    })
 
     with app.app_context():
         db.drop_all()
