@@ -11,22 +11,26 @@ from flask import current_app
 from app.core.rate_limiter import RateLimiter
 import fakeredis
 
-@pytest.fixture(scope='session')
+
+@pytest.fixture(scope="session")
 def fake_redis():
     """Create a fake Redis instance for testing"""
     return fakeredis.FakeStrictRedis()
 
-@pytest.fixture(scope='session')
+
+@pytest.fixture(scope="session")
 def app(fake_redis):
     """Create test Flask app with rate limiting support"""
-    app = create_app('testing')
-    app.config.update({
-        'REDIS_URL': 'redis://fake',  # Add Redis URL to config
-        'RATE_LIMIT_ENABLED': True    # Enable rate limiting in tests
-    })
+    app = create_app("testing")
+    app.config.update(
+        {
+            "REDIS_URL": "redis://fake",  # Add Redis URL to config
+            "RATE_LIMIT_ENABLED": True,  # Enable rate limiting in tests
+        }
+    )
 
     # Initialize rate limiter with fake redis
-    limiter = RateLimiter(redis_url='redis://fake')
+    limiter = RateLimiter(redis_url="redis://fake")
     limiter.init_app(app)
     limiter.redis = fake_redis  # Use our fake redis instance
 
@@ -40,9 +44,9 @@ def app(fake_redis):
         db.drop_all()
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def app():
-    app = create_app('testing')
+    app = create_app("testing")
     print(f"Using database URL: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
     with app.app_context():
@@ -64,10 +68,7 @@ def test_user(app):
         try:
             db.session.begin_nested()
             user = User(
-                id=str(uuid4()),
-                email="test@example.com",
-                first_name="Test",
-                last_name="User"
+                id=str(uuid4()), email="test@example.com", first_name="Test", last_name="User"
             )
             user.password = "password123"
             db.session.add(user)
@@ -91,10 +92,7 @@ def test_tenant(app):
         try:
             db.session.begin_nested()
             tenant = Tenant(
-                id=str(uuid4()),
-                name="Test Business",
-                subdomain="test-business",
-                is_active=True
+                id=str(uuid4()), name="Test Business", subdomain="test-business", is_active=True
             )
             db.session.add(tenant)
             db.session.commit()
@@ -118,10 +116,7 @@ def test_role(app, test_tenant):
         try:
             db.session.begin_nested()
             role = Role(
-                id=str(uuid4()),
-                name="admin",
-                tenant_id=test_tenant.id,
-                permissions={"admin": True}
+                id=str(uuid4()), name="admin", tenant_id=test_tenant.id, permissions={"admin": True}
             )
             db.session.add(role)
             db.session.commit()
@@ -147,7 +142,7 @@ def test_user_with_role(app, test_user, test_tenant, test_role):
                 user_id=test_user.id,
                 tenant_id=test_tenant.id,
                 role_id=test_role.id,
-                is_primary=True
+                is_primary=True,
             )
             db.session.add(user_tenant_role)
             db.session.commit()
@@ -169,30 +164,19 @@ def second_tenant(app, test_tenant, test_user_with_role, test_role):
     try:
         db.session.begin_nested()
         tenant = Tenant(
-            id=str(uuid4()),
-            name="Second Business",
-            subdomain="second-business",
-            is_active=True
+            id=str(uuid4()), name="Second Business", subdomain="second-business", is_active=True
         )
         db.session.add(tenant)
         db.session.commit()
 
         db.session.begin_nested()
-        role = Role(
-            id=str(uuid4()),
-            name="user",
-            tenant_id=tenant.id,
-            permissions={"basic": True}
-        )
+        role = Role(id=str(uuid4()), name="user", tenant_id=tenant.id, permissions={"basic": True})
         db.session.add(role)
         db.session.commit()
 
         db.session.begin_nested()
         tenant_role = UserTenantRole(
-            user_id=test_user_with_role.id,
-            tenant_id=tenant.id,
-            role_id=role.id,
-            is_primary=False
+            user_id=test_user_with_role.id, tenant_id=tenant.id, role_id=role.id, is_primary=False
         )
         db.session.add(tenant_role)
         db.session.commit()
@@ -214,7 +198,7 @@ def second_tenant(app, test_tenant, test_user_with_role, test_role):
 def auth_headers(test_user_with_role):
     """Create authentication headers with JWT token"""
     token = create_access_token(identity=test_user_with_role.id)
-    return {'Authorization': f'Bearer {token}'}
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
@@ -223,12 +207,9 @@ def test_settings(test_tenant):
     try:
         db.session.begin_nested()
         settings = Settings(
-            owner_type='tenant',
+            owner_type="tenant",
             owner_id=test_tenant.id,
-            settings={
-                'theme': 'light',
-                'notifications': True
-            }
+            settings={"theme": "light", "notifications": True},
         )
         db.session.add(settings)
         db.session.commit()
@@ -254,5 +235,3 @@ def cleanup_settings(app):
             db.session.rollback()
         finally:
             db.session.close()
-
-

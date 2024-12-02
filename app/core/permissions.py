@@ -17,9 +17,7 @@ def require_permission(permission):
 
             role = user.get_role_for_tenant(tenant)
             if not role or not role.has_permission(permission):
-                raise PermissionDenied(
-                    f"User does not have required permission: {permission}"
-                )
+                raise PermissionDenied(f"User does not have required permission: {permission}")
 
             return f(*args, **kwargs)
 

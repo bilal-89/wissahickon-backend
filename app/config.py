@@ -9,22 +9,22 @@ import sys
 # Enhanced logging setup
 def setup_logging(app_env):
     """Configure logging based on environment"""
-    log_level = logging.DEBUG if app_env == 'development' else logging.INFO
+    log_level = logging.DEBUG if app_env == "development" else logging.INFO
 
     # Create logs directory if it doesn't exist
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
+    if not os.path.exists("logs"):
+        os.makedirs("logs")
 
     # Create custom formatter with tenant support
     class TenantFormatter(logging.Formatter):
         def format(self, record):
-            if not hasattr(record, 'tenant_id'):
-                record.tenant_id = 'NO_TENANT'
+            if not hasattr(record, "tenant_id"):
+                record.tenant_id = "NO_TENANT"
             return super().format(record)
 
     # Configure logging format
     log_format = TenantFormatter(
-        '%(asctime)s - %(name)s - %(levelname)s - [%(tenant_id)s] - %(message)s'
+        "%(asctime)s - %(name)s - %(levelname)s - [%(tenant_id)s] - %(message)s"
     )
 
     # Console handler
@@ -33,9 +33,7 @@ def setup_logging(app_env):
 
     # File handler
     file_handler = RotatingFileHandler(
-        'logs/app.log',
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5
+        "logs/app.log", maxBytes=10 * 1024 * 1024, backupCount=5  # 10MB
     )
     file_handler.setFormatter(log_format)
 
@@ -53,7 +51,7 @@ def setup_logging(app_env):
 
 
 # Initialize logging
-logger = setup_logging(os.getenv('FLASK_ENV', 'development'))
+logger = setup_logging(os.getenv("FLASK_ENV", "development"))
 
 
 def get_secret(secret_id, default_value):
@@ -70,13 +68,13 @@ def get_secret(secret_id, default_value):
 
 def get_db_url(db_name):
     """Get database URL with connection parameters"""
-    user = os.getenv('DB_USER', 'postgres')
-    password = os.getenv('DB_PASSWORD', 'PostgresDev2024!')
-    host = os.getenv('DB_HOST', 'localhost')
-    port = os.getenv('DB_PORT', '5433')
+    user = os.getenv("DB_USER", "postgres")
+    password = os.getenv("DB_PASSWORD", "PostgresDev2024!")
+    host = os.getenv("DB_HOST", "localhost")
+    port = os.getenv("DB_PORT", "5433")
 
     # Add SSL mode for production
-    ssl_mode = "?sslmode=verify-full" if os.getenv('FLASK_ENV') == 'production' else ""
+    ssl_mode = "?sslmode=verify-full" if os.getenv("FLASK_ENV") == "production" else ""
 
     return f"postgresql://{user}:{password}@{host}:{port}/{db_name}{ssl_mode}"
 
@@ -92,7 +90,7 @@ class BaseConfig:
     # Security settings
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SAMESITE = "Lax"
     PERMANENT_SESSION_LIFETIME = timedelta(days=1)
 
     # CORS settings
@@ -100,7 +98,7 @@ class BaseConfig:
     CORS_SUPPORTS_CREDENTIALS = True
 
     # JWT settings
-    JWT_TOKEN_LOCATION = ['headers', 'cookies']
+    JWT_TOKEN_LOCATION = ["headers", "cookies"]
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     JWT_COOKIE_SECURE = True
@@ -112,24 +110,27 @@ class BaseConfig:
 
     # Database settings
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'pool_timeout': 30,
-        'pool_recycle': 1800,
-        'max_overflow': 20,
+        "pool_size": 10,
+        "pool_timeout": 30,
+        "pool_recycle": 1800,
+        "max_overflow": 20,
     }
 
     # Secrets
-    SECRET_KEY = get_secret('wis-flask-secret-key', os.getenv('SECRET_KEY', 'dev-secret-key'))
-    JWT_SECRET_KEY = get_secret('wis-jwt-secret-key', os.getenv('JWT_SECRET_KEY', 'dev-jwt-secret-key'))
+    SECRET_KEY = get_secret("wis-flask-secret-key", os.getenv("SECRET_KEY", "dev-secret-key"))
+    JWT_SECRET_KEY = get_secret(
+        "wis-jwt-secret-key", os.getenv("JWT_SECRET_KEY", "dev-jwt-secret-key")
+    )
 
 
 class DevelopmentConfig(BaseConfig):
     """Development configuration"""
+
     DEBUG = True
     DEVELOPMENT = True
 
     # Database
-    SQLALCHEMY_DATABASE_URI = get_db_url('wis_dev')
+    SQLALCHEMY_DATABASE_URI = get_db_url("wis_dev")
     SQLALCHEMY_ECHO = True
 
     # Rate limiting
@@ -150,26 +151,26 @@ class DevelopmentConfig(BaseConfig):
     REDIS_URL = "redis://localhost:6379"
 
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 5,  # Base number of connections
-        'max_overflow': 10,  # Additional connections if needed
-        'pool_timeout': 30,  # Seconds to wait for connection
-        'pool_recycle': 1800,  # Recycle connections after 30 min
-        'pool_pre_ping': True  # Check connection validity before use
+        "pool_size": 5,  # Base number of connections
+        "max_overflow": 10,  # Additional connections if needed
+        "pool_timeout": 30,  # Seconds to wait for connection
+        "pool_recycle": 1800,  # Recycle connections after 30 min
+        "pool_pre_ping": True,  # Check connection validity before use
     }
-
 
 
 class ProductionConfig(BaseConfig):
     """Production configuration"""
+
     DEBUG = False
     TESTING = False
 
     # Database
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     SQLALCHEMY_ECHO = False
 
     # Rate limiting
-    RATELIMIT_STORAGE_URL = os.getenv('REDIS_URL')
+    RATELIMIT_STORAGE_URL = os.getenv("REDIS_URL")
     RATELIMIT_DEFAULT = "100 per day"
     RATELIMIT_HEADERS_ENABLED = True
 
@@ -178,33 +179,33 @@ class ProductionConfig(BaseConfig):
     JWT_COOKIE_SECURE = True
 
     # CORS
-    CORS_ORIGINS = os.getenv('ALLOWED_ORIGINS', '').split(',')
+    CORS_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(",")
 
     # Caching
     CACHE_TYPE = "redis"
-    CACHE_REDIS_URL = os.getenv('REDIS_URL')
+    CACHE_REDIS_URL = os.getenv("REDIS_URL")
     CACHE_DEFAULT_TIMEOUT = 300
 
     # Monitoring
-    SENTRY_DSN = get_secret('sentry-dsn', os.getenv('SENTRY_DSN'))
+    SENTRY_DSN = get_secret("sentry-dsn", os.getenv("SENTRY_DSN"))
 
     # Performance
-    PREFERRED_URL_SCHEME = 'https'
+    PREFERRED_URL_SCHEME = "https"
 
     # File uploads
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
 
-    REDIS_URL = os.getenv('REDIS_URL')
-
+    REDIS_URL = os.getenv("REDIS_URL")
 
 
 class TestingConfig(BaseConfig):
     """Testing configuration"""
+
     TESTING = True
     DEBUG = False
 
     # Database
-    SQLALCHEMY_DATABASE_URI = get_db_url('app_test')
+    SQLALCHEMY_DATABASE_URI = get_db_url("app_test")
     SQLALCHEMY_ECHO = False
 
     # Security - disabled for testing
@@ -223,46 +224,42 @@ class TestingConfig(BaseConfig):
 
 def configure_app(app):
     """Configure the Flask app with additional settings"""
-    env = os.getenv('FLASK_ENV', 'development')
+    env = os.getenv("FLASK_ENV", "development")
     app.config.from_object(config_by_name[env])
 
     # Additional production configurations
-    if env == 'production':
+    if env == "production":
         # Configure Sentry
-        if app.config.get('SENTRY_DSN'):
+        if app.config.get("SENTRY_DSN"):
             import sentry_sdk
             from sentry_sdk.integrations.flask import FlaskIntegration
 
             sentry_sdk.init(
-                dsn=app.config['SENTRY_DSN'],
+                dsn=app.config["SENTRY_DSN"],
                 integrations=[FlaskIntegration()],
                 traces_sample_rate=1.0,
-                environment=env
+                environment=env,
             )
 
         # Configure SSL if behind proxy
-        if os.getenv('BEHIND_PROXY', False):
+        if os.getenv("BEHIND_PROXY", False):
             from werkzeug.middleware.proxy_fix import ProxyFix
+
             app.wsgi_app = ProxyFix(
-                app.wsgi_app,
-                x_for=1,
-                x_proto=1,
-                x_host=1,
-                x_port=1,
-                x_prefix=1
+                app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1
             )
 
     return app
 
 
 config_by_name = {
-    'development': DevelopmentConfig,
-    'production': ProductionConfig,
-    'testing': TestingConfig
+    "development": DevelopmentConfig,
+    "production": ProductionConfig,
+    "testing": TestingConfig,
 }
 
 
 def get_config():
     """Get configuration based on environment"""
-    env = os.getenv('FLASK_ENV', 'development')
+    env = os.getenv("FLASK_ENV", "development")
     return config_by_name[env]

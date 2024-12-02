@@ -1,6 +1,7 @@
 from ..extensions import db
 from datetime import datetime
 
+
 class BaseModel(db.Model):
     __abstract__ = True
 

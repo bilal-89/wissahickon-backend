@@ -1,9 +1,10 @@
-# app/core/rate_limit.py
+# app/core/rate_limiter.py
 
 from functools import wraps
 from flask import request, jsonify, current_app, g
 import redis
 from typing import Optional, Callable
+from app.core.errors import APIError
 
 
 class RateLimiter:
@@ -18,12 +19,14 @@ class RateLimiter:
 
     def init_app(self, app):
         """Initialize with Flask application"""
-        self.enabled = app.config.get('RATE_LIMIT_ENABLED', True)
+        self.enabled = app.config.get("RATE_LIMIT_ENABLED", True)
         if not self.enabled:
             return
 
         try:
-            self.redis_url = self.redis_url or app.config.get('REDIS_URL', 'redis://localhost:6379/0')
+            self.redis_url = self.redis_url or app.config.get(
+                "REDIS_URL", "redis://localhost:6379/0"
+            )
             self.redis = redis.from_url(self.redis_url)
         except (redis.RedisError, KeyError):
             current_app.logger.warning("Redis not available - rate limiting disabled")
@@ -40,10 +43,9 @@ class RateLimiter:
                     return f(*args, **kwargs)
 
                 try:
-                    # Rest of your rate limiting logic remains the same...
                     redis_client = self.redis
                     identifier = request.remote_addr
-                    if hasattr(g, 'tenant'):
+                    if hasattr(g, "tenant"):
                         identifier = f"{identifier}:{g.tenant.id}"
 
                     key = f"rate_limit:{key_prefix}:{identifier}"
@@ -52,32 +54,43 @@ class RateLimiter:
                     if current == 1:
                         redis_client.expire(key, period)
 
+                    # Calculate headers early
+                    remaining = max(0, limit - current)
+                    rate_limit_headers = {
+                        "X-RateLimit-Limit": str(limit),
+                        "X-RateLimit-Remaining": str(remaining),
+                        "X-RateLimit-Reset": str(redis_client.ttl(key)),
+                    }
+
                     if current > limit:
-                        response = jsonify({
-                            'error': 'Rate limit exceeded',
-                            'retry_after': redis_client.ttl(key)
-                        })
-                        response.headers['Retry-After'] = str(redis_client.ttl(key))
+                        response = jsonify(
+                            {"error": "Rate limit exceeded", "retry_after": redis_client.ttl(key)}
+                        )
+                        response.headers.update(rate_limit_headers)
+                        response.headers["Retry-After"] = str(redis_client.ttl(key))
                         return response, 429
 
-                    response = f(*args, **kwargs)
+                    try:
+                        # Execute the wrapped function
+                        response = f(*args, **kwargs)
 
-                    if isinstance(response, tuple):
-                        response_obj, status_code = response
-                    else:
-                        response_obj, status_code = response, 200
+                        if isinstance(response, tuple):
+                            response_obj, status_code = response
+                        else:
+                            response_obj, status_code = response, 200
 
-                    if not hasattr(response_obj, 'headers'):
-                        response_obj = jsonify(response_obj)
+                        if not hasattr(response_obj, "headers"):
+                            response_obj = jsonify(response_obj)
 
-                    remaining = max(0, limit - current)
-                    response_obj.headers.update({
-                        'X-RateLimit-Limit': str(limit),
-                        'X-RateLimit-Remaining': str(remaining),
-                        'X-RateLimit-Reset': str(redis_client.ttl(key))
-                    })
+                        response_obj.headers.update(rate_limit_headers)
+                        return response_obj, status_code
 
-                    return response_obj, status_code
+                    except APIError as e:
+                        # Handle API errors while preserving rate limit headers
+                        response = jsonify(e.to_dict())
+                        response.status_code = e.status_code
+                        response.headers.update(rate_limit_headers)
+                        return response, e.status_code
 
                 except (redis.RedisError, Exception) as e:
                     # Log the error but don't break the request

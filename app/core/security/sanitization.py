@@ -11,28 +11,26 @@ class RequestSanitizer:
     def __init__(self):
         self.max_content_length = 10 * 1024 * 1024  # 10MB default
         self.allowed_content_types = {
-            'application/json',
-            'multipart/form-data',
-            'application/x-www-form-urlencoded',
-            'text/plain'
+            "application/json",
+            "multipart/form-data",
+            "application/x-www-form-urlencoded",
+            "text/plain",
         }
-        self.allowed_tags = [
-            'p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li'
-        ]
+        self.allowed_tags = ["p", "br", "strong", "em", "u", "ul", "ol", "li"]
 
     def sanitize_string(self, value: str) -> str:
         """Sanitize a single string value."""
         if not isinstance(value, str):
             return str(value)
-        value = value.replace('\x00', '')
-        value = ''.join(char for char in value if char >= ' ' or char in '\n\t')
+        value = value.replace("\x00", "")
+        value = "".join(char for char in value if char >= " " or char in "\n\t")
         return bleach.clean(value, tags=self.allowed_tags, strip=True)
 
     def validate_content_type(self, content_type: str) -> bool:
         """Validate that the content type is allowed."""
         if not content_type:
             return True
-        base_content_type = content_type.split(';')[0].strip().lower()
+        base_content_type = content_type.split(";")[0].strip().lower()
         return base_content_type in self.allowed_content_types
 
     def validate_content_length(self, content_length: int) -> bool:
@@ -55,14 +53,14 @@ def sanitize_request(exempt_paths: Optional[List[str]] = None):
                     if re.match(path, request.path):
                         return f(*args, **kwargs)
 
-            if request.method in ['POST', 'PUT', 'PATCH']:
+            if request.method in ["POST", "PUT", "PATCH"]:
                 # Validate content length
                 content_length = request.content_length or 0
                 if not sanitizer.validate_content_length(content_length):
                     abort(413, description="Request entity too large")
 
                 # Validate content type
-                content_type = request.headers.get('Content-Type', '')
+                content_type = request.headers.get("Content-Type", "")
                 if not sanitizer.validate_content_type(content_type):
                     abort(415, description=f"Unsupported content type: {content_type}")
 
@@ -71,6 +69,7 @@ def sanitize_request(exempt_paths: Optional[List[str]] = None):
                     try:
                         data = request.get_json()
                         if data:
+
                             def sanitize_data(obj):
                                 if isinstance(obj, str):
                                     return sanitizer.sanitize_string(obj)
@@ -88,8 +87,7 @@ def sanitize_request(exempt_paths: Optional[List[str]] = None):
                 # Handle form data
                 elif request.form:
                     sanitized_form = {
-                        key: sanitizer.sanitize_string(value)
-                        for key, value in request.form.items()
+                        key: sanitizer.sanitize_string(value) for key, value in request.form.items()
                     }
                     for key, value in sanitized_form.items():
                         request.form = request.form.copy()

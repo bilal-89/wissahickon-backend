@@ -2,6 +2,7 @@
 from flask import jsonify
 from .exceptions import PermissionDenied
 
+
 class APIError(Exception):
     def __init__(self, message, status_code=400, payload=None):
         super().__init__()
@@ -11,7 +12,7 @@ class APIError(Exception):
 
     def to_dict(self):
         rv = dict(self.payload or ())
-        rv['message'] = self.message
+        rv["message"] = self.message
         return rv
 
     def __str__(self):
@@ -27,10 +28,7 @@ def handle_api_error(error):
 
 def handle_permission_denied(error):
     """Handle PermissionDenied exceptions"""
-    response = jsonify({
-        'message': str(error),
-        'error': 'permission_denied'
-    })
+    response = jsonify({"message": str(error), "error": "permission_denied"})
     response.status_code = 403
     return response
 
@@ -39,3 +37,18 @@ def register_error_handlers(app):
     """Register error handlers with the Flask app"""
     app.register_error_handler(APIError, handle_api_error)
     app.register_error_handler(PermissionDenied, handle_permission_denied)
+
+
+def register_error_handlers(app):
+    @app.errorhandler(APIError)
+    def handle_api_error(error):
+        response = jsonify(error.to_dict())
+        response.status_code = error.status_code
+
+        # Preserve any rate limit headers from the original response
+        if hasattr(error, "headers"):
+            for key, value in error.headers.items():
+                if key.startswith("X-RateLimit-"):
+                    response.headers[key] = value
+
+        return response

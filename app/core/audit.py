@@ -16,23 +16,16 @@ def track_changes(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, An
     # Find modified fields
     for key in set(before.keys()) | set(after.keys()):
         if key not in before:
-            changes[key] = {'added': after[key]}
+            changes[key] = {"added": after[key]}
         elif key not in after:
-            changes[key] = {'removed': before[key]}
+            changes[key] = {"removed": before[key]}
         elif before[key] != after[key]:
-            changes[key] = {
-                'from': before[key],
-                'to': after[key]
-            }
+            changes[key] = {"from": before[key], "to": after[key]}
 
     return changes if changes else None
 
 
-def audit_action(
-        action: str,
-        entity_type: str,
-        get_entity_id: Optional[Callable] = None
-):
+def audit_action(action: str, entity_type: str, get_entity_id: Optional[Callable] = None):
     """
     Decorator to audit API actions.
 
@@ -54,7 +47,7 @@ def audit_action(
 
                 # Now create audit log in a separate transaction
                 try:
-                    tenant_id = getattr(g, 'tenant', None).id if hasattr(g, 'tenant') else None
+                    tenant_id = getattr(g, "tenant", None).id if hasattr(g, "tenant") else None
                     user_id = get_current_user_id()
                     entity_id = get_entity_id(response) if get_entity_id else None
 
@@ -70,7 +63,7 @@ def audit_action(
                         user_id=user_id,
                         ip_address=request.remote_addr,
                         user_agent=request.user_agent.string,
-                        endpoint=request.endpoint
+                        endpoint=request.endpoint,
                     )
 
                     db.session.commit()
@@ -101,8 +94,8 @@ def audit_model_changes(model_class):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             # Get object state before changes
-            if 'id' in kwargs:
-                before_obj = model_class.query.get(kwargs['id'])
+            if "id" in kwargs:
+                before_obj = model_class.query.get(kwargs["id"])
                 before_state = before_obj.to_dict() if before_obj else None
             else:
                 before_state = None
@@ -127,16 +120,18 @@ def audit_model_changes(model_class):
 
                         # Create audit log
                         AuditLog.create(
-                            action='update' if before_state else 'create',
+                            action="update" if before_state else "create",
                             entity_type=model_class.__name__.lower(),
                             entity_id=entity_id,
                             changes=changes,
-                            tenant_id=getattr(g, 'tenant', None).id if hasattr(g, 'tenant') else None,
+                            tenant_id=(
+                                getattr(g, "tenant", None).id if hasattr(g, "tenant") else None
+                            ),
                             user_id=get_current_user_id(),
                             metadata={
-                                'model': model_class.__name__,
-                                'operation': 'update' if before_state else 'create'
-                            }
+                                "model": model_class.__name__,
+                                "operation": "update" if before_state else "create",
+                            },
                         )
 
                         db.session.commit()

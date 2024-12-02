@@ -36,18 +36,20 @@ class Metrics:
         """Get current metrics with thread safety"""
         with self._lock:
             stats = {
-                'total_requests': self.request_count,
-                'error_count': self.error_count,
-                'error_rate': (self.error_count / self.request_count * 100) if self.request_count > 0 else 0,
-                'endpoints': {}
+                "total_requests": self.request_count,
+                "error_count": self.error_count,
+                "error_rate": (
+                    (self.error_count / self.request_count * 100) if self.request_count > 0 else 0
+                ),
+                "endpoints": {},
             }
 
             for endpoint, times in self.response_times.items():
                 if times:
                     avg_time = sum(times) / len(times)
-                    stats['endpoints'][endpoint] = {
-                        'average_response_time': f"{avg_time:.3f}s",
-                        'request_count': len(times)
+                    stats["endpoints"][endpoint] = {
+                        "average_response_time": f"{avg_time:.3f}s",
+                        "request_count": len(times),
                     }
 
             return stats
@@ -81,15 +83,15 @@ def capture_error(f: Callable):
         except Exception as e:
             # Log error details
             error_id = str(time())
-            tenant_id = getattr(g, 'tenant', None)
+            tenant_id = getattr(g, "tenant", None)
             error_details = {
-                'error_id': error_id,
-                'timestamp': datetime.utcnow().isoformat(),
-                'endpoint': request.endpoint,
-                'method': request.method,
-                'tenant_id': tenant_id.id if tenant_id else None,
-                'error': str(e),
-                'error_type': type(e).__name__
+                "error_id": error_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "endpoint": request.endpoint,
+                "method": request.method,
+                "tenant_id": tenant_id.id if tenant_id else None,
+                "error": str(e),
+                "error_type": type(e).__name__,
             }
 
             # Track in metrics using thread-safe method
@@ -99,16 +101,14 @@ def capture_error(f: Callable):
             current_app.logger.exception(f"Unhandled Exception: {str(e)}")
 
             # Return error response
-            return jsonify({
-                'error': str(e),
-                'error_id': error_id
-            }), 500
+            return jsonify({"error": str(e), "error_id": error_id}), 500
 
     return decorated_function
 
 
 def track_performance(f: Callable):
     """Decorator to track endpoint performance"""
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         start_time = time()
@@ -126,21 +126,13 @@ def track_performance(f: Callable):
                 status = response.status_code
 
             # Track metrics
-            metrics.track_request(
-                endpoint=request.endpoint,
-                duration=duration,
-                status_code=status
-            )
+            metrics.track_request(endpoint=request.endpoint, duration=duration, status_code=status)
 
             return response
 
         except Exception as e:
             duration = time() - start_time
-            metrics.track_request(
-                endpoint=request.endpoint,
-                duration=duration,
-                status_code=500
-            )
+            metrics.track_request(endpoint=request.endpoint, duration=duration, status_code=500)
             raise
 
     return decorated_function
