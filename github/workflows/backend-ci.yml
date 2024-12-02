@@ -68,11 +68,14 @@ jobs:
           pip install -r requirements.txt
           pip install pytest-cov flake8 black mypy
 
-      - name: Run code quality checks
-        run: |
-          black . --check
-          flake8 .
-          mypy .
+      - name: Check formatting with Black
+        run: black . --check
+
+      - name: Lint with Flake8
+        run: flake8 .
+
+      - name: Type check with MyPy
+        run: mypy .
 
       - name: Run tests with coverage
         run: |
