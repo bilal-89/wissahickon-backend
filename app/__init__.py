@@ -1,5 +1,7 @@
 # app/__init__.py
 import logging
+from datetime import timedelta
+
 from flask import Flask, jsonify, request
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
@@ -35,10 +37,15 @@ def create_app(config_name="development"):
     # Initialize extensions
     db.init_app(app)
     jwt = JWTManager(app)
+    app.config.update({
+        'JWT_SECRET_KEY': app.config.get('JWT_SECRET_KEY', 'dev-jwt-secret-key'),
+        'JWT_ACCESS_TOKEN_EXPIRES': timedelta(hours=1),
+        'JWT_TOKEN_LOCATION': ['headers'],
+        'JWT_COOKIE_CSRF_PROTECT': False if config_name == "testing" else True
+    })
     init_security_headers(app)
     CORS(app)
     init_sentry(app)
-    # limiter = RateLimiter()
 
     # Initialize migrations
     migrate = Migrate(app, db)
