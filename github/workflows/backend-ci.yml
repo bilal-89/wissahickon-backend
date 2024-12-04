@@ -1,5 +1,4 @@
-# .github/workflows/backend-ci.yml
-name: Backend CI
+name: Backend CI/CD
 
 on:
   push:
@@ -14,8 +13,7 @@ jobs:
     services:
       redis:
         image: redis
-        ports:
-          - 6379:6379
+        ports: [ "6379:6379" ]
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -28,8 +26,7 @@ jobs:
           POSTGRES_PASSWORD: PostgresDev2024!
           POSTGRES_USER: postgres
           POSTGRES_DB: app_test
-        ports:
-          - 5433:5432
+        ports: [ "5433:5432" ]
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -54,7 +51,7 @@ jobs:
         with:
           python-version: 3.9
 
-      - name: Cache pip dependencies
+      - name: Cache pip
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
@@ -68,21 +65,51 @@ jobs:
           pip install -r requirements.txt
           pip install pytest-cov flake8 black mypy
 
-      - name: Check formatting with Black
+      - name: Run database migrations
+        run: flask db upgrade
+
+      - name: Check formatting
         run: black . --check
 
-      - name: Lint with Flake8
-        run: flake8 .
+      - name: Lint code
+        run: flake8 . --max-line-length=100 --exclude=migrations
 
-      - name: Type check with MyPy
+      - name: Type check
         run: mypy .
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=app --cov-report=xml -v
+          pytest --cov=app --cov-report=xml --cov-fail-under=80 -v
 
-      - name: Upload coverage report
+      - name: Upload coverage
         uses: actions/upload-artifact@v3
         with:
           name: coverage-report
           path: coverage.xml
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker
+        
+      - name: Build image
+        run: |
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/wissahickon-backend:${{ github.sha }} .
+          docker tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/wissahickon-backend:${{ github.sha }} gcr.io/${{ secrets.GCP_PROJECT_ID }}/wissahickon-backend:latest
+
+      - name: Push image
+        run: |
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/wissahickon-backend:${{ github.sha }}
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/wissahickon-backend:latest
